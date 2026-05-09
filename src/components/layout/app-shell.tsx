@@ -3,12 +3,14 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import {
   CalendarClock,
   CalendarDays,
   LayoutDashboard,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   PawPrint,
   Settings,
   ClipboardList,
@@ -30,6 +32,27 @@ const systemNav = [
   { href: "/configuracoes", id: "configuracoes", label: "Configuracoes", icon: Settings },
   { href: "/importacao", id: "importacao", label: "Importacao", icon: ClipboardList },
 ];
+
+const SIDEBAR_STORAGE_KEY = "zeni-sidebar-collapsed";
+const SIDEBAR_CHANGE_EVENT = "zeni-sidebar-change";
+
+function subscribeSidebar(onChange: () => void) {
+  window.addEventListener(SIDEBAR_CHANGE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(SIDEBAR_CHANGE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function readSidebarCollapsed() {
+  return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? "1" : "0");
+  window.dispatchEvent(new Event(SIDEBAR_CHANGE_EVENT));
+}
 
 type ShellCounts = {
   agenda: number;
@@ -68,6 +91,14 @@ export function AppShell({
   user: ShellUser;
 }) {
   const pathname = usePathname();
+  const collapsed = useSyncExternalStore(
+    subscribeSidebar,
+    readSidebarCollapsed,
+    () => false,
+  );
+
+  const toggleSidebar = () => writeSidebarCollapsed(!collapsed);
+
   const countById: Partial<Record<string, number>> = {
     agenda: counts.agenda,
     reservas: counts.reservas,
@@ -76,15 +107,26 @@ export function AppShell({
   };
 
   return (
-    <div className="app">
+    <div className="app" data-sidebar={collapsed ? "collapsed" : "expanded"}>
       <aside className="sidebar">
-        <Link className="sidebar__brand" href="/dashboard">
-          <img src="/zeni-logo.png" alt="Zeni Pets" width={34} height={34} />
-          <div className="sidebar__brand-text">
-            <span className="sidebar__brand-name">Zeni Pets</span>
-            <span className="sidebar__brand-sub">Painel interno</span>
-          </div>
-        </Link>
+        <div className="sidebar__top">
+          <Link className="sidebar__brand" href="/dashboard" title="Zeni Pets">
+            <img src="/zeni-logo.png" alt="Zeni Pets" width={36} height={36} />
+            <div className="sidebar__brand-text">
+              <span className="sidebar__brand-name">Zeni Pets</span>
+              <span className="sidebar__brand-sub">Painel interno</span>
+            </div>
+          </Link>
+          <button
+            type="button"
+            className="sidebar__toggle"
+            onClick={toggleSidebar}
+            aria-label={collapsed ? "Expandir menu lateral" : "Retrair menu lateral"}
+            title={collapsed ? "Expandir menu" : "Retrair menu"}
+          >
+            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+          </button>
+        </div>
 
         <div className="sidebar__section-label">Operacao</div>
         {nav.map((item) => {
@@ -95,9 +137,10 @@ export function AppShell({
               className={`nav-item ${active ? "is-active" : ""}`}
               href={item.href}
               key={item.id}
+              title={collapsed ? item.label : undefined}
             >
               <Icon />
-              <span>{item.label}</span>
+              <span className="nav-item__label">{item.label}</span>
               {countById[item.id] != null ? (
                 <span className="nav-item__count">{countById[item.id]}</span>
               ) : null}
@@ -113,9 +156,10 @@ export function AppShell({
               className={`nav-item ${pathname.startsWith(item.href) ? "is-active" : ""}`}
               href={item.href}
               key={item.id}
+              title={collapsed ? item.label : undefined}
             >
               <Icon />
-              <span>{item.label}</span>
+              <span className="nav-item__label">{item.label}</span>
             </Link>
           );
         })}
@@ -127,7 +171,12 @@ export function AppShell({
             <div className="sidebar__user-role">{user ? ROLE_LABEL[user.role] : ""}</div>
           </div>
           <form action={logoutAction}>
-            <button className="btn btn--ghost btn--icon sidebar__logout" type="submit" aria-label="Sair">
+            <button
+              className="btn btn--icon sidebar__logout"
+              type="submit"
+              aria-label="Sair"
+              title="Sair"
+            >
               <LogOut />
             </button>
           </form>

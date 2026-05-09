@@ -16,10 +16,10 @@ export function MetricCard({
 }) {
   return (
     <div className="stat">
-      <div className="stat__label">
+      <div className="stat__icon">
         <Icon />
-        {label}
       </div>
+      <div className="stat__label">{label}</div>
       <div className="stat__value">{value}</div>
       {positive ? (
         <div className="stat__delta stat__delta--up">
