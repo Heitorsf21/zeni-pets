@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Zeni Pets — Mockups de cor</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    background: #f5f5f4;
+    color: #1a1a1a;
+    padding: 40px 32px;
+  }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .sub { color: #6b6b6b; margin-bottom: 28px; font-size: 14px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+    max-width: 1100px;
+  }
+  a.card {
+    display: block;
+    background: white;
+    border: 1px solid #e8e8e6;
+    border-radius: 12px;
+    padding: 22px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform .15s, box-shadow .15s;
+  }
+  a.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  }
+  .swatch-row { display: flex; gap: 6px; margin-bottom: 14px; }
+  .sw { width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.05); }
+  .name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .desc { font-size: 13px; color: #6b6b6b; line-height: 1.45; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .tag-rec { background: #e5f3eb; color: #2f8f5c; }
+  .tag-safe { background: #f1eef8; color: #756599; }
+  .tag-bold { background: #fbf1dc; color: #b8791f; }
+  .tag-final { background: #2F6E69; color: #E8F5F4; }
+  footer { margin-top: 32px; font-size: 12px; color: #9a9a9a; }
+</style>
+</head>
+<body>
+  <h1>Zeni Pets — 3 modelos de cor</h1>
+  <p class="sub">Clique em cada modelo para ver o mockup do dashboard pintado com a paleta.</p>
+
+  <div class="grid">
+    <a class="card" href="modelo-final-zeni-premium.html" style="grid-column: 1 / -1; border:2px solid #2F6E69">
+      <div class="swatch-row">
+        <div class="sw" style="background:#2F6E69"></div>
+        <div class="sw" style="background:#A89AD0"></div>
+        <div class="sw" style="background:#EDF3F1"></div>
+        <div class="sw" style="background:#DDEEEC"></div>
+        <div class="sw" style="background:#E5DFF2"></div>
+        <div class="sw" style="background:#F8E9D3"></div>
+        <div class="sw" style="background:#F7DCDC"></div>
+      </div>
+      <span class="tag tag-final">★ Modelo final</span>
+      <div class="name">Zeni Premium — sidebar do Modelo 2 + corpo do Modelo 3</div>
+      <div class="desc">Sidebar teal escuro com item ativo lilás (identidade da logo) + métricas em tiles coloridos, sombras com tom da marca, badges saturados e calendário com strip teal lateral. Combinação aprovada.</div>
+    </a>
+
+    <a class="card" href="modelo-1-marca-suave.html">
+      <div class="swatch-row">
+        <div class="sw" style="background:#F4F7F6"></div>
+        <div class="sw" style="background:#EEF4F3"></div>
+        <div class="sw" style="background:#3F8E88"></div>
+        <div class="sw" style="background:#A89AD0"></div>
+        <div class="sw" style="background:#FFFFFF"></div>
+      </div>
+      <span class="tag tag-safe">Mais seguro</span>
+      <div class="name">Modelo 1 — Marca Suave</div>
+      <div class="desc">Tira o "branco hospitalar". Off-white com leve ciano, sidebar levemente colorida. Mudança discreta, baixíssimo risco.</div>
+    </a>
+
+    <a class="card" href="modelo-2-zeni-viva.html">
+      <div class="swatch-row">
+        <div class="sw" style="background:#F1F6F5"></div>
+        <div class="sw" style="background:#2F6E69"></div>
+        <div class="sw" style="background:#A89AD0"></div>
+        <div class="sw" style="background:#3F8E88"></div>
+        <div class="sw" style="background:#FFFFFF"></div>
+      </div>
+      <span class="tag tag-rec">Recomendado</span>
+      <div class="name">Modelo 2 — Zeni Viva</div>
+      <div class="desc">Sidebar em ciano-petróleo escuro, item ativo em lilás — traduz literalmente a logo. Identidade forte sem perder profissionalismo.</div>
+    </a>
+
+    <a class="card" href="modelo-3-operacional-premium.html">
+      <div class="swatch-row">
+        <div class="sw" style="background:#EDF3F1"></div>
+        <div class="sw" style="background:#DDEEEC"></div>
+        <div class="sw" style="background:#E5DFF2"></div>
+        <div class="sw" style="background:#F8E9D3"></div>
+        <div class="sw" style="background:#3F8E88"></div>
+      </div>
+      <span class="tag tag-bold">Mais ousado</span>
+      <div class="name">Modelo 3 — Operacional Premium</div>
+      <div class="desc">Métricas viram tiles coloridos, sidebar branca com pílula teal saturada. Sensação Linear/Stripe com paleta Zeni.</div>
+    </a>
+  </div>
+
+  <footer>Mockups estáticos — apenas visualização. Nenhum arquivo do projeto foi alterado.</footer>
+</body>
+</html>

@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Modelo 1 — Marca Suave</title>
+<style>
+:root {
+  --bg: #F4F7F6;
+  --bg-elevated: #FFFFFF;
+  --bg-subtle: #EAF0EE;
+  --bg-hover: #E2EAE8;
+  --text: #1a1a1a;
+  --text-muted: #6b6b6b;
+  --text-subtle: #9a9a9a;
+  --border: #DCE4E2;
+  --border-strong: #C9D4D1;
+  --sidebar-bg: #EEF4F3;
+  --sidebar-active-bg: #D4E7E4;
+  --topbar-bg: #FBFCFC;
+  --teal-50:#E8F5F4; --teal-100:#C9E8E5; --teal-200:#9DD4CF; --teal-300:#6FBDB6;
+  --teal-400:#4FA8A1; --teal-500:#3F8E88; --teal-600:#2F6E69;
+  --lilac-50:#F1EEF8; --lilac-100:#E0DAEF; --lilac-200:#C5BAE0; --lilac-300:#A89AD0; --lilac-500:#756599;
+  --warm-100:#F8E9D3; --warm-500:#B8791F;
+  --rose-100:#F7DCDC; --rose-500:#B83A3A;
+  --success:#2F8F5C; --success-bg:#DCEEE3;
+  --warning:#B8791F; --warning-bg:#FBF1DC;
+  --danger:#B83A3A; --danger-bg:#FBE5E5;
+  --shadow-sm: 0 1px 3px rgba(20,20,20,0.05), 0 1px 2px rgba(20,20,20,0.03);
+  --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased; }
+a { color:inherit; text-decoration:none; }
+
+.preview-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: var(--text); color: white;
+  padding: 8px 16px; font-size: 12px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.preview-banner a { color: var(--teal-200); }
+
+.app { display:grid; grid-template-columns:232px minmax(0,1fr); min-height:100vh; padding-top:36px; }
+
+.sidebar {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display:flex; flex-direction:column; padding:20px 14px; gap:4px;
+  min-height: calc(100vh - 36px); position:sticky; top:36px;
+}
+.sidebar__brand {
+  display:flex; align-items:center; gap:10px;
+  padding:4px 10px 18px; border-bottom:1px solid var(--border); margin-bottom:14px;
+}
+.sidebar__brand img { width:34px; height:34px; object-fit:contain; }
+.sidebar__brand-name { font-weight:600; font-size:14px; }
+.sidebar__brand-sub { font-size:11px; color:var(--text-subtle); }
+.sidebar__section-label {
+  font-size:10px; font-weight:600; letter-spacing:0.08em;
+  text-transform:uppercase; color:var(--text-subtle); padding:14px 10px 6px;
+}
+.nav-item {
+  display:flex; align-items:center; gap:10px; padding:8px 10px;
+  border-radius:var(--r-sm); font-size:13px; color:var(--text-muted); font-weight:500;
+}
+.nav-item:hover { background:var(--bg-hover); color:var(--text); }
+.nav-item.is-active { background:var(--sidebar-active-bg); color:var(--teal-600); }
+.nav-item svg { width:16px; height:16px; color:var(--text-subtle); flex-shrink:0; }
+.nav-item.is-active svg { color:var(--teal-500); }
+.nav-item__count {
+  margin-left:auto; font-size:11px; color:var(--text-subtle);
+  background:var(--bg-elevated); padding:1px 6px; border-radius:999px;
+}
+.sidebar__user {
+  margin-top:auto; display:flex; align-items:center; gap:10px;
+  padding:14px 10px 10px; border-top:1px solid var(--border);
+}
+.sidebar__user-avatar {
+  width:30px; height:30px; border-radius:50%;
+  background:linear-gradient(135deg, var(--lilac-300), var(--teal-300));
+  color:white; font-size:12px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+}
+.sidebar__user-name { font-size:12px; font-weight:600; }
+.sidebar__user-role { font-size:11px; color:var(--text-subtle); }
+
+.main { min-width:0; }
+.topbar {
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:18px 28px; border-bottom:1px solid var(--border); background:var(--topbar-bg);
+  position:sticky; top:36px; z-index:5;
+}
+.topbar__left h1 { font-size:18px; font-weight:600; margin:0; }
+.topbar__left p { font-size:12px; color:var(--text-muted); margin:2px 0 0; }
+.topbar__right { display:flex; align-items:center; gap:8px; }
+
+.search { position:relative; width:270px; }
+.search input {
+  width:100%; min-height:34px; border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--bg-elevated); padding:8px 10px 8px 32px; font-size:13px; color:var(--text);
+}
+.search svg {
+  position:absolute; left:10px; top:50%; transform:translateY(-50%);
+  width:14px; height:14px; color:var(--text-subtle);
+}
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:7px 12px; border-radius:var(--r-sm); border:1px solid var(--border);
+  background:var(--bg-elevated); font-size:13px; font-weight:500; color:var(--text);
+  cursor:pointer; min-height:32px;
+}
+.btn:hover { background:var(--bg-subtle); }
+.btn svg { width:14px; height:14px; }
+.btn--primary { background:var(--teal-500); border-color:var(--teal-500); color:white; }
+.btn--primary:hover { background:var(--teal-600); border-color:var(--teal-600); }
+.btn--icon { width:30px; height:30px; padding:6px; }
+.btn--ghost { background:transparent; border-color:transparent; color:var(--text-muted); }
+.btn--sm { min-height:28px; padding:5px 9px; font-size:12px; }
+
+.content { padding:24px 28px; display:flex; flex-direction:column; gap:20px; }
+
+.grid-4 { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+.dashboard-grid { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:20px; }
+
+.card, .stat {
+  background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--r-lg); overflow:hidden;
+}
+.card__header {
+  padding:14px 16px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+.card__title { font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
+.card__title svg { width:15px; height:15px; }
+.card__subtitle { font-size:11px; color:var(--text-subtle); margin-top:2px; }
+.card__body { padding:16px; }
+.card__body--flush { padding:0; }
+
+.stat { padding:16px 18px; display:flex; flex-direction:column; gap:4px; }
+.stat__label {
+  font-size:11px; font-weight:500; color:var(--text-muted);
+  letter-spacing:0.02em; text-transform:uppercase;
+  display:flex; align-items:center; gap:6px;
+}
+.stat__label svg { width:13px; height:13px; }
+.stat__value {
+  font-size:26px; font-weight:600; letter-spacing:-0.02em; line-height:1.1; margin-top:4px;
+  font-feature-settings:"tnum";
+}
+.stat__hint { font-size:11px; margin-top:3px; color:var(--text-subtle); }
+.stat__delta { font-size:11px; margin-top:3px; display:flex; align-items:center; gap:4px; font-weight:500; color:var(--success); }
+
+.icon-circle {
+  width:30px; height:30px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--teal-50); color:var(--teal-600);
+}
+.icon-circle svg { width:14px; height:14px; }
+.icon-circle--lilac { background:var(--lilac-50); color:var(--lilac-500); }
+.icon-circle--warm { background:var(--warning-bg); color:var(--warning); }
+.icon-circle--rose { background:var(--danger-bg); color:var(--danger); }
+
+.badge {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:2px 8px; border-radius:999px; font-size:11px; font-weight:500;
+  background:var(--bg-subtle); color:var(--text-muted); white-space:nowrap;
+}
+.badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+.badge--confirmada { background:var(--teal-50); color:var(--teal-600); }
+.badge--pago { background:var(--success-bg); color:var(--success); }
+.badge--em-andamento { background:var(--lilac-50); color:var(--lilac-500); }
+.badge--pendente { background:var(--warning-bg); color:var(--warning); }
+.badge--cancelada { background:var(--danger-bg); color:var(--danger); }
+
+.table { width:100%; border-collapse:collapse; }
+.table th, .table td {
+  padding:11px 16px; border-bottom:1px solid var(--border);
+  text-align:left; font-size:13px; vertical-align:middle;
+}
+.table th {
+  font-size:11px; text-transform:uppercase; letter-spacing:0.04em;
+  color:var(--text-subtle); font-weight:600; background:var(--bg-subtle);
+}
+.table tr:last-child td { border-bottom:0; }
+.mono { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.muted { color:var(--text-muted); }
+.subtle { color:var(--text-subtle); }
+
+.pet-row { display:flex; align-items:center; gap:10px; }
+.avatar {
+  width:30px; height:30px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  color:white; font-size:12px; font-weight:600; flex-shrink:0;
+}
+.avatar--teal { background:linear-gradient(135deg, var(--teal-300), var(--teal-500)); }
+.avatar--lilac { background:linear-gradient(135deg, var(--lilac-300), var(--lilac-500)); }
+.avatar--warm { background:linear-gradient(135deg, var(--warm-100), var(--warm-500)); }
+.avatar--rose { background:linear-gradient(135deg, var(--rose-100), var(--rose-500)); }
+.pet-row__name { font-size:13px; font-weight:600; }
+.pet-row__sub { font-size:11px; color:var(--text-subtle); }
+
+.cal {
+  display:grid; grid-template-columns:repeat(7,minmax(0,1fr));
+  border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;
+}
+.cal__day {
+  min-height:88px; padding:8px; background:var(--bg-elevated);
+  border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+}
+.cal__day--empty { background:rgba(0,0,0,0.02); }
+.cal__day--today { background:rgba(63,142,136,0.10); border-color:rgba(63,142,136,0.5); }
+.cal__day:nth-child(7n) { border-right:0; }
+.cal__head {
+  min-height:auto; background:var(--bg-subtle); color:var(--text-subtle);
+  font-size:11px; font-weight:600; text-transform:uppercase; padding:8px;
+}
+.cal__date { font-size:12px; color:var(--text-muted); margin-bottom:6px; }
+.cal__chip {
+  display:block; padding:3px 6px; border-radius:var(--r-sm);
+  font-size:10px; margin-top:3px;
+  background:var(--teal-50); color:var(--teal-600);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.cal__chip--lilac { background:var(--lilac-50); color:var(--lilac-500); }
+.cal__chip--warm { background:var(--warning-bg); color:var(--warning); }
+
+.task { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.task:last-child { border-bottom:0; }
+.task input { accent-color: var(--teal-500); }
+
+.progress { height:8px; border-radius:999px; background:var(--bg-subtle); overflow:hidden; }
+.progress__bar { height:100%; border-radius:inherit; background:var(--teal-500); }
+
+.row { display:flex; align-items:center; gap:8px; }
+.row--between { justify-content:space-between; }
+.stack { display:flex; flex-direction:column; gap:20px; }
+</style>
+</head>
+<body>
+
+<div class="preview-banner">
+  <span><strong>Modelo 1 — Marca Suave</strong> · mockup estático</span>
+  <span><a href="index.html">← voltar</a> · <a href="modelo-2-zeni-viva.html">Modelo 2 →</a></span>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <a class="sidebar__brand" href="#">
+      <img src="../public/zeni-logo.png" alt="Zeni Pets" />
+      <div>
+        <div class="sidebar__brand-name">Zeni Pets</div>
+        <div class="sidebar__brand-sub">Painel interno</div>
+      </div>
+    </a>
+
+    <div class="sidebar__section-label">Operação</div>
+    <a class="nav-item is-active" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      Google Agenda
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01"/></svg>
+      Reservas
+      <span class="nav-item__count">12</span>
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Tutores
+      <span class="nav-item__count">38</span>
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="4" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="20" cy="16" r="2"/><circle cx="4" cy="8" r="2"/><circle cx="6" cy="16" r="2"/><path d="M9 10c-2 1-3 2.5-3 5 0 2 1 3 3 3h4c2 0 3-1 3-3 0-2.5-1-4-3-5"/></svg>
+      Pets
+      <span class="nav-item__count">52</span>
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M16 12h.01"/></svg>
+      Financeiro
+    </a>
+
+    <div class="sidebar__section-label">Sistema</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h0a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v0a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+      Configurações
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+      Importação
+    </a>
+
+    <div class="sidebar__user">
+      <div class="sidebar__user-avatar">FZ</div>
+      <div style="flex:1">
+        <div class="sidebar__user-name">Fernanda Zeni</div>
+        <div class="sidebar__user-role">Proprietária</div>
+      </div>
+      <button class="btn btn--ghost btn--icon" aria-label="Sair">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar__left">
+        <h1>Bom dia, Fernanda</h1>
+        <p>sábado, 09 de maio de 2026</p>
+      </div>
+      <div class="topbar__right">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input placeholder="Buscar..." />
+        </div>
+        <button class="btn btn--primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Nova reserva
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="grid-4">
+        <div class="stat">
+          <div class="stat__label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4v16M22 4v16M2 8h20M2 16h20"/></svg>
+            Hospedados
+          </div>
+          <div class="stat__value">14<span style="font-size:14px;color:var(--text-subtle);font-weight:500">/20</span></div>
+          <div class="stat__hint">70% de ocupação hoje</div>
+        </div>
+        <div class="stat">
+          <div class="stat__label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2"/></svg>
+            Day-care hoje
+          </div>
+          <div class="stat__value">7</div>
+          <div class="stat__hint">3 chegam ainda hoje</div>
+        </div>
+        <div class="stat">
+          <div class="stat__label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+            Faturamento mês
+          </div>
+          <div class="stat__value">R$ 8.420</div>
+          <div class="stat__delta">▲ +12% vs. abril</div>
+        </div>
+        <div class="stat">
+          <div class="stat__label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            Alertas
+          </div>
+          <div class="stat__value">2</div>
+          <div class="stat__hint">vacinas próximas do vencimento</div>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="stack">
+          <section class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4v16M22 4v16M2 8h20M2 16h20"/></svg>
+                  Pets hospedados hoje
+                </div>
+                <div class="card__subtitle">Capacidade do hotel — 14 de 20 vagas ocupadas</div>
+              </div>
+              <button class="btn btn--sm">Ver todos</button>
+            </div>
+            <div class="card__body card__body--flush">
+              <table class="table">
+                <thead>
+                  <tr><th>Pet</th><th>Tutor</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><div class="pet-row"><div class="avatar avatar--teal">TH</div><div><div class="pet-row__name">Thor</div><div class="pet-row__sub">Golden retriever</div></div></div></td>
+                    <td class="muted">Mariana Silva</td>
+                    <td class="mono subtle">05/05</td>
+                    <td class="mono subtle">12/05</td>
+                    <td><span class="badge badge--confirmada">confirmada</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pet-row"><div class="avatar avatar--lilac">LU</div><div><div class="pet-row__name">Luna</div><div class="pet-row__sub">Shih-tzu</div></div></div></td>
+                    <td class="muted">Roberto Mendes</td>
+                    <td class="mono subtle">07/05</td>
+                    <td class="mono subtle">11/05</td>
+                    <td><span class="badge badge--em-andamento">em andamento</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pet-row"><div class="avatar avatar--warm">BE</div><div><div class="pet-row__name">Bento</div><div class="pet-row__sub">Vira-lata caramelo</div></div></div></td>
+                    <td class="muted">Carla Andrade</td>
+                    <td class="mono subtle">08/05</td>
+                    <td class="mono subtle">15/05</td>
+                    <td><span class="badge badge--pago">pago</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="pet-row"><div class="avatar avatar--rose">ME</div><div><div class="pet-row__name">Mel</div><div class="pet-row__sub">Poodle toy</div></div></div></td>
+                    <td class="muted">Patrícia Ferreira</td>
+                    <td class="mono subtle">09/05</td>
+                    <td class="mono subtle">13/05</td>
+                    <td><span class="badge badge--pendente">pendente</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  Maio 2026
+                </div>
+                <div class="card__subtitle">Eventos sincronizados com Google Agenda</div>
+              </div>
+            </div>
+            <div class="card__body">
+              <div class="cal">
+                <div class="cal__day cal__head">Seg</div>
+                <div class="cal__day cal__head">Ter</div>
+                <div class="cal__day cal__head">Qua</div>
+                <div class="cal__day cal__head">Qui</div>
+                <div class="cal__day cal__head">Sex</div>
+                <div class="cal__day cal__head">Sáb</div>
+                <div class="cal__day cal__head">Dom</div>
+
+                <div class="cal__day cal__day--empty"></div>
+                <div class="cal__day cal__day--empty"></div>
+                <div class="cal__day cal__day--empty"></div>
+                <div class="cal__day"><div class="cal__date">1</div></div>
+                <div class="cal__day"><div class="cal__date">2</div><span class="cal__chip">Hosp - Thor</span></div>
+                <div class="cal__day"><div class="cal__date">3</div></div>
+                <div class="cal__day"><div class="cal__date">4</div></div>
+
+                <div class="cal__day"><div class="cal__date">5</div><span class="cal__chip">Hosp - Thor</span><span class="cal__chip cal__chip--lilac">Day - Luna</span></div>
+                <div class="cal__day"><div class="cal__date">6</div></div>
+                <div class="cal__day"><div class="cal__date">7</div><span class="cal__chip cal__chip--warm">Sitter</span></div>
+                <div class="cal__day"><div class="cal__date">8</div><span class="cal__chip">Hosp - Bento</span></div>
+                <div class="cal__day cal__day--today"><div class="cal__date"><strong>9</strong></div><span class="cal__chip">Hosp - Mel</span><span class="cal__chip cal__chip--lilac">Day</span></div>
+                <div class="cal__day"><div class="cal__date">10</div></div>
+                <div class="cal__day"><div class="cal__date">11</div></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="stack">
+          <section class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Capacidade do hotel</div>
+                <div class="card__subtitle">de 20 vagas</div>
+              </div>
+              <strong>70%</strong>
+            </div>
+            <div class="card__body">
+              <div class="progress"><div class="progress__bar" style="width:70%"></div></div>
+              <p class="subtle" style="margin:10px 0 0;font-size:12px">Capacidade atual: <strong>14</strong> de 20 vagas.</p>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Tarefas do dia</div>
+                <div class="card__subtitle">2 de 4 concluídas</div>
+              </div>
+              <button class="btn btn--sm">+ Nova</button>
+            </div>
+            <div class="card__body">
+              <div class="task"><input type="checkbox" checked /> <span class="subtle">Conferir vacinas Thor</span></div>
+              <div class="task"><input type="checkbox" checked /> <span class="subtle">Banho Luna 10h</span></div>
+              <div class="task"><input type="checkbox" /> <span>Receber tutor Bento</span></div>
+              <div class="task"><input type="checkbox" /> <span>Fechar caixa do dia</span></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header">
+              <div class="card__title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M5 12l4-4M5 12l4 4"/></svg>
+                Próximas chegadas
+              </div>
+            </div>
+            <div class="card__body card__body--flush">
+              <div style="padding:12px 16px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--border)">
+                <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>
+                <div style="flex:1"><div style="font-size:13px;font-weight:500">Bento — chegada</div><div class="subtle" style="font-size:11px">Carla Andrade</div></div>
+                <div class="mono muted" style="font-size:12px">14:00</div>
+              </div>
+              <div style="padding:12px 16px;display:flex;gap:10px;align-items:center">
+                <div class="icon-circle icon-circle--lilac"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/></svg></div>
+                <div style="flex:1"><div style="font-size:13px;font-weight:500">Luna — saída</div><div class="subtle" style="font-size:11px">Roberto Mendes</div></div>
+                <div class="mono muted" style="font-size:12px">17:30</div>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

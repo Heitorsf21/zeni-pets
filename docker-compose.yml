@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zeni-pets-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zeni
+      POSTGRES_PASSWORD: zeni
+      POSTGRES_DB: zeni_pets
+    ports:
+      - "55432:5432"
+    volumes:
+      - zeni_pets_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeni -d zeni_pets"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  zeni_pets_pgdata:
