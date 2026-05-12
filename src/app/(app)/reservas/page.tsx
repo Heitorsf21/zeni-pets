@@ -4,6 +4,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationFormData, getReservationsListData } from "@/lib/app-data";
+import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { NovaReservaModal } from "./nova-reserva-modal";
 import { FiltrosReservasModal } from "./filtros-modal";
 
@@ -14,6 +15,9 @@ function multiParam(value: string | string[] | undefined): string[] {
   if (value == null) return [];
   if (Array.isArray(value)) return value;
   return value.split(",").filter(Boolean);
+}
+function hasParam(value: string | string[] | undefined) {
+  return value != null;
 }
 
 function buildHref(filters: Record<string, string | number | string[]>, page: number) {
@@ -36,10 +40,14 @@ export default async function ReservasPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  const scope = firstParam(params.scope) === "all" ? "all" : "upcoming";
+  const status = hasParam(params.status) ? multiParam(params.status) : undefined;
+  const paymentStatus = hasParam(params.paymentStatus) ? multiParam(params.paymentStatus) : undefined;
   const [data, formData] = await Promise.all([
     getReservationsListData({
-      status: multiParam(params.status),
-      paymentStatus: multiParam(params.paymentStatus),
+      scope,
+      status,
+      paymentStatus,
       serviceTypeId: firstParam(params.serviceTypeId),
       tutorId: firstParam(params.tutorId),
       from: firstParam(params.from),
@@ -54,19 +62,25 @@ export default async function ReservasPage({
   const deleted = firstParam(params.deleted);
 
   const activeCount =
-    (data.filters.status.length ? 1 : 0)
-    + (data.filters.paymentStatus.length ? 1 : 0)
+    (hasParam(params.status) ? 1 : 0)
+    + (hasParam(params.paymentStatus) ? 1 : 0)
     + (data.filters.serviceTypeId ? 1 : 0)
     + (data.filters.tutorId ? 1 : 0)
     + (data.filters.from ? 1 : 0)
     + (data.filters.to ? 1 : 0)
     + (data.filters.q ? 1 : 0);
+  const title = data.filters.scope === "all" ? "Histórico completo" : "Próximas reservas";
+  const subtitle = data.filters.scope === "all"
+    ? `${data.total} reservas no histórico`
+    : `${data.total} reservas de hoje em diante`;
+  const allHref = buildHref({ scope: "all" }, 1);
+  const upcomingHref = buildHref({ scope: "upcoming" }, 1);
 
   return (
     <>
       <Topbar
         title="Reservas"
-        subtitle={`${data.total} reservas no filtro atual`}
+        subtitle={subtitle}
         actions={
           <>
             <FiltrosReservasModal
@@ -80,7 +94,9 @@ export default async function ReservasPage({
             <NovaReservaModal
               tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-              serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+              serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+              seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+              depositPercent={formData.settings?.depositPercent ?? 50}
             />
           </>
         }
@@ -92,11 +108,15 @@ export default async function ReservasPage({
           <div className="card__header">
             <div>
               <div className="card__title"><CalendarClock /> Lista</div>
-              <div className="card__subtitle">Pagina {data.page} de {data.totalPages}</div>
+              <div className="card__subtitle">{title} - página {data.page} de {data.totalPages}</div>
             </div>
             <div className="row">
+              <div className="tabs">
+                <Link href={upcomingHref} className={`tab ${data.filters.scope === "upcoming" ? "is-active" : ""}`}>Próximas</Link>
+                <Link href={allHref} className={`tab ${data.filters.scope === "all" ? "is-active" : ""}`}>Histórico completo</Link>
+              </div>
               <Link className="btn btn--sm" href={buildHref(data.filters, Math.max(data.page - 1, 1))}>Anterior</Link>
-              <Link className="btn btn--sm" href={buildHref(data.filters, Math.min(data.page + 1, data.totalPages))}>Proxima</Link>
+              <Link className="btn btn--sm" href={buildHref(data.filters, Math.min(data.page + 1, data.totalPages))}>Próxima</Link>
             </div>
           </div>
           <div className="card__body card__body--flush">
@@ -105,8 +125,8 @@ export default async function ReservasPage({
                 <tr>
                   <th>Tutor</th>
                   <th>Pets</th>
-                  <th>Servico</th>
-                  <th>Periodo</th>
+                  <th>Serviço</th>
+                  <th>Período</th>
                   <th>Status</th>
                   <th>Pagamento</th>
                   <th className="table__num">Valor</th>

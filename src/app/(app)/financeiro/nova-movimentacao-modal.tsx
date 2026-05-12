@@ -12,10 +12,10 @@ export function NovaMovimentacaoModal() {
     <Modal
       trigger={
         <button type="button" className="btn btn--primary">
-          <Plus /> Adicionar movimentacao
+          <Plus /> Adicionar movimentação
         </button>
       }
-      title="Nova movimentacao"
+      title="Nova movimentação"
       width={560}
     >
       <form className="form-grid" action={createFinancialEntryAction}>
@@ -49,7 +49,7 @@ export function NovaMovimentacaoModal() {
           <input
             className="input"
             name="category"
-            placeholder={kind === "INCOME" ? "Servico extra" : "Insumos"}
+            placeholder={kind === "INCOME" ? "Serviço extra" : "Insumos"}
             required
           />
         </label>
@@ -64,21 +64,21 @@ export function NovaMovimentacaoModal() {
         <label className="field">
           <span className="field__label">Forma de pagamento</span>
           <select className="select" name="method" defaultValue="">
-            <option value="">Nao informar</option>
+            <option value="">Não informar</option>
             <option value="PIX">PIX</option>
             <option value="CASH">Dinheiro</option>
-            <option value="CARD">Cartao</option>
-            <option value="TRANSFER">Transferencia</option>
+            <option value="CARD">Cartão</option>
+            <option value="TRANSFER">Transferência</option>
             <option value="OTHER">Outro</option>
           </select>
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Descricao</span>
+          <span className="field__label">Descrição</span>
           <input className="input" name="description" placeholder="Detalhe opcional" />
         </label>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>
           <button className="btn btn--primary" type="submit">
-            Salvar movimentacao
+            Salvar movimentação
           </button>
         </div>
       </form>

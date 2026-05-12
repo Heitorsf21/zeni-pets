@@ -154,7 +154,7 @@ function petCandidateSummary(group: PetForDedupe[], reason: string) {
       name: pet.name,
       subtitle: `Tutor: ${pet.tutor.name}`,
       evidence: [
-        pet.breed ? `raca: ${pet.breed}` : "sem raca",
+        pet.breed ? `raça: ${pet.breed}` : "sem raça",
         `${pet._count.reservationPets} reservas`,
         `${pet._count.tasks} tarefas`,
       ],
@@ -196,7 +196,7 @@ export async function buildTutorDedupeCandidates(db: Db): Promise<CandidateInput
       groupKey: `tutor-name:${key}`,
       confidence: 0.95,
       candidateIds: ids,
-      summary: tutorCandidateSummary([...group].sort(tutorCanonicalSort), "Mesmo nome apos normalizacao."),
+      summary: tutorCandidateSummary([...group].sort(tutorCanonicalSort), "Mesmo nome após normalização."),
     });
   }
 
@@ -234,8 +234,8 @@ export async function buildPetDedupeCandidates(db: Db): Promise<CandidateInput[]
         summary: petCandidateSummary(
           sorted,
           breeds.length <= 1
-            ? "Mesmo nome do pet e primeiro nome do tutor; raca compativel."
-            : "Mesmo nome do pet e primeiro nome do tutor; revisar raca antes de mesclar.",
+            ? "Mesmo nome do pet e primeiro nome do tutor; raça compatível."
+            : "Mesmo nome do pet e primeiro nome do tutor; revisar raça antes de mesclar.",
         ),
       };
     });
@@ -396,7 +396,7 @@ export async function mergeTutors(input: {
     const canonical = tutors.find((tutor) => tutor.id === input.canonicalId);
     const duplicates = tutors.filter((tutor) => mergeIds.includes(tutor.id));
     if (!canonical || duplicates.length !== mergeIds.length) {
-      throw new Error("Tutor canonico ou duplicados nao encontrados.");
+      throw new Error("Tutor canônico ou duplicados não encontrados.");
     }
 
     await tx.pet.updateMany({ where: { tutorId: { in: mergeIds } }, data: { tutorId: input.canonicalId } });
@@ -511,7 +511,7 @@ export async function mergePets(input: {
     const canonical = pets.find((pet) => pet.id === input.canonicalId);
     const duplicates = pets.filter((pet) => mergeIds.includes(pet.id));
     if (!canonical || duplicates.length !== mergeIds.length) {
-      throw new Error("Pet canonico ou duplicados nao encontrados.");
+      throw new Error("Pet canônico ou duplicados não encontrados.");
     }
 
     for (const duplicateId of mergeIds) {

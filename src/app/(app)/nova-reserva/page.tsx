@@ -3,7 +3,11 @@ import { Topbar } from "@/components/layout/topbar";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationFormData } from "@/lib/app-data";
 import { createReservationAction } from "@/app/(app)/reservas/actions";
-import { brl } from "@/lib/money";
+import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
+import { ReservationPetFields } from "@/app/(app)/reservas/reservation-pet-fields";
+import { ReservationPricingPreview } from "@/app/(app)/reservas/reservation-pricing-preview";
+import { ReservationTaskFields } from "@/app/(app)/reservas/reservation-task-fields";
+import { ServicePriceRuleFields } from "@/app/(app)/reservas/service-price-rule-fields";
 
 export default async function NovaReservaPage({
   searchParams,
@@ -11,10 +15,9 @@ export default async function NovaReservaPage({
   searchParams?: Promise<{ error?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
-  const { tutors, pets, serviceTypes } = await getReservationFormData();
-  const firstService = serviceTypes[0];
-  const firstRule = firstService?.priceRules[0];
-  const defaultBase = firstRule?.firstPetCents ?? 8000;
+  const { tutors, pets, serviceTypes, settings, seasonPeriods } = await getReservationFormData();
+  const serviceOptions = toReservationServiceOptions(serviceTypes);
+  const seasonOptions = toReservationSeasonOptions(seasonPeriods);
 
   return (
     <>
@@ -40,25 +43,10 @@ export default async function NovaReservaPage({
               <div className="card__title"><UserRound /> Tutor e pet</div>
             </div>
             <div className="card__body form-grid">
-              <label className="field">
-                <span className="field__label">Tutor</span>
-                <select className="select" name="tutorId" required>
-                  <option value="">Selecione</option>
-                  {tutors.map((tutor) => (
-                    <option key={tutor.id} value={tutor.id}>{tutor.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="field__label">Pets</span>
-                <select className="select" name="petIds" multiple required style={{ minHeight: 116 }}>
-                  {pets.map((pet) => (
-                    <option key={pet.id} value={pet.id}>
-                      {pet.name} - {pet.tutor.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ReservationPetFields
+                tutors={tutors.map((tutor) => ({ id: tutor.id, name: tutor.name }))}
+                pets={pets.map((pet) => ({ id: pet.id, name: pet.name, tutor: { id: pet.tutor.id, name: pet.tutor.name } }))}
+              />
             </div>
           </div>
 
@@ -67,14 +55,7 @@ export default async function NovaReservaPage({
               <div className="card__title"><PawPrint /> Tipo de servico</div>
             </div>
             <div className="card__body form-grid">
-              <label className="field">
-                <span className="field__label">Servico</span>
-                <select className="select" name="serviceTypeId" required>
-                  {serviceTypes.map((serviceType) => (
-                    <option key={serviceType.id} value={serviceType.id}>{serviceType.name}</option>
-                  ))}
-                </select>
-              </label>
+              <ServicePriceRuleFields serviceTypes={serviceOptions} />
               <label className="field">
                 <span className="field__label">Retirada</span>
                 <select className="select" name="pickupMode" defaultValue="TUTOR_DROPS_OFF">
@@ -83,7 +64,7 @@ export default async function NovaReservaPage({
                 </select>
               </label>
               <label className="field">
-                <span className="field__label">Distancia taxi pet km</span>
+                <span className="field__label">Distância taxi pet km</span>
                 <input className="input" name="distanceKm" defaultValue="0" />
               </label>
             </div>
@@ -91,7 +72,7 @@ export default async function NovaReservaPage({
 
           <div className="card">
             <div className="card__header">
-              <div className="card__title"><CalendarClock /> Periodo</div>
+              <div className="card__title"><CalendarClock /> Período</div>
             </div>
             <div className="card__body form-grid">
               <label className="field">
@@ -103,8 +84,8 @@ export default async function NovaReservaPage({
                 <input className="input" name="endsAt" type="datetime-local" required />
               </label>
               <label className="field">
-                <span className="field__label">Valor base</span>
-                <input className="input" name="baseAmountCents" defaultValue={(defaultBase / 100).toFixed(2).replace(".", ",")} />
+                <span className="field__label">Valor base manual</span>
+                <input className="input" name="baseAmountCents" placeholder="automatico" />
               </label>
               <label className="field">
                 <span className="field__label">Desconto</span>
@@ -115,9 +96,21 @@ export default async function NovaReservaPage({
                 <input className="input" name="additionalCents" defaultValue="0,00" />
               </label>
               <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <span className="field__label">Observacoes da reserva</span>
+                <span className="field__label">Observações da reserva</span>
                 <textarea className="textarea" name="notes" placeholder="Rotina, itens, combinados e cuidados sensiveis" />
               </label>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div className="card__title">Tarefa da reserva</div>
+            </div>
+            <div className="card__body form-grid">
+              <ReservationTaskFields
+                formId="reservation-form"
+                pets={pets.map((pet) => ({ id: pet.id, name: pet.name, tutor: { id: pet.tutor.id, name: pet.tutor.name } }))}
+              />
             </div>
           </div>
         </form>
@@ -127,13 +120,12 @@ export default async function NovaReservaPage({
             <div className="card__title"><CreditCard /> Resumo</div>
           </div>
           <div className="card__body stack" style={{ gap: 14 }}>
-            <div className="row row--between"><span className="muted">Servico</span><strong>{firstService?.name ?? "Hospedagem"}</strong></div>
-            <div className="row row--between"><span className="muted">Valor base sugerido</span><span>{brl(defaultBase)}</span></div>
-            <div className="row row--between"><span className="muted">Taxi pet</span><span>Calculado ao salvar</span></div>
-            <div className="row row--between"><span className="muted">Alta temporada</span><span>Aplicada automaticamente</span></div>
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }} className="row row--between">
-              <strong>Sinal sugerido</strong><strong>50%</strong>
-            </div>
+            <ReservationPricingPreview
+              formId="reservation-form"
+              serviceTypes={serviceOptions}
+              seasonPeriods={seasonOptions}
+              depositPercent={settings?.depositPercent ?? 50}
+            />
             <label className="check" form="reservation-form">
               <input type="checkbox" name="inviteTutor" form="reservation-form" /> Enviar convite ao tutor
             </label>

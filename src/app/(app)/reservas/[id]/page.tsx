@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, CheckCircle2, CreditCard, Flag, PauseCircle, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarClock, CreditCard, Flag, ListChecks, XCircle } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Topbar } from "@/components/layout/topbar";
@@ -9,13 +9,17 @@ import { ConfirmForm } from "@/components/ui/confirm-form";
 import { getReservationDetailData, getReservationFormData } from "@/lib/app-data";
 import { formatDateTimeShort, toDatetimeLocalValue } from "@/lib/date";
 import { brl } from "@/lib/money";
+import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
+import { sumPaidCents } from "@/lib/reservation-status";
+import { sumCreditBalance } from "@/lib/credits";
 import {
   concludeWithLateFeeAction,
   deleteReservationAction,
   registerPaymentAction,
-  updateReservationStatusAction,
+  useTutorCreditAction,
 } from "../actions";
 import { NovaReservaModal } from "../nova-reserva-modal";
+import { ReservationStatusMenu } from "../reservation-status-menu";
 
 export default async function ReservationDetailPage({
   params,
@@ -33,25 +37,28 @@ export default async function ReservationDetailPage({
 
   if (!reservation) notFound();
 
-  const paidCents = reservation.payments
-    .filter((payment) => payment.status === "PAID")
-    .reduce((total, payment) => total + payment.amountCents, 0);
+  const paidCents = sumPaidCents(reservation.payments);
   const remainingCents = Math.max(reservation.totalCents - paidCents, 0);
+  const tutorCreditBalanceCents = sumCreditBalance(reservation.tutor.creditTransactions);
+  const usableCreditCents = Math.min(Math.max(tutorCreditBalanceCents, 0), remainingCents);
   const canDelete = reservation.status === "REQUESTED" || reservation.status === "CANCELLED";
   const deleteReservation = deleteReservationAction.bind(null, reservation.id);
+  const useCredit = useTutorCreditAction.bind(null, reservation.id);
 
   return (
     <>
       <Topbar
         title={`${reservation.serviceType.name} - ${reservation.tutor.name}`}
-        subtitle="Detalhe da reserva, pagamentos e sincronizacao de agenda"
+        subtitle="Detalhe da reserva, pagamentos e sincronização de agenda"
         actions={
           <>
             <Link className="btn" href="/agenda"><ArrowLeft /> Agenda</Link>
             <NovaReservaModal
               tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-              serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+              serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+              seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+              depositPercent={formData.settings?.depositPercent ?? 50}
             />
           </>
         }
@@ -78,8 +85,12 @@ export default async function ReservationDetailPage({
                 <Link className="linklike" href={`/tutores/${reservation.tutor.id}/ficha`}>{reservation.tutor.name}</Link>
               </div>
               <div>
-                <div className="field__label">Servico</div>
+                <div className="field__label">Serviço</div>
                 <strong>{reservation.serviceType.name}</strong>
+              </div>
+              <div>
+                <div className="field__label">Tabela de preço</div>
+                <strong>{reservation.priceRule ? `${reservation.priceRule.label} - ${reservation.priceRule.paymentMethod}` : reservation.pricingPaymentMethod ?? "-"}</strong>
               </div>
               <div>
                 <div className="field__label">Retirada</div>
@@ -87,16 +98,16 @@ export default async function ReservationDetailPage({
               </div>
               <div>
                 <div className="field__label">Google</div>
-                <strong>{reservation.googleEventId ? "Sincronizado" : "Nao sincronizado"}</strong>
+                <strong>{reservation.googleEventId ? "Sincronizado" : "Não sincronizado"}</strong>
               </div>
               {reservation.syncConflict ? (
                 <div className="alert alert--danger" style={{ gridColumn: "1 / -1" }}>
-                  Conflito de sincronizacao: {reservation.syncConflictReason || "revisao necessaria"}
+                  Conflito de sincronização: {reservation.syncConflictReason || "revisão necessária"}
                 </div>
               ) : null}
               <div style={{ gridColumn: "1 / -1" }}>
-                <div className="field__label">Observacoes</div>
-                <p className="muted">{reservation.notes || "Sem observacoes."}</p>
+                <div className="field__label">Observações</div>
+                <p className="muted">{reservation.notes || "Sem observações."}</p>
               </div>
             </div>
           </section>
@@ -126,8 +137,46 @@ export default async function ReservationDetailPage({
           <section className="card">
             <div className="card__header">
               <div>
+                <div className="card__title"><ListChecks /> Tarefas da reserva</div>
+                <div className="card__subtitle">Tarefas vinculadas a esta estadia e ao pet responsável</div>
+              </div>
+            </div>
+            <div className="card__body card__body--flush">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Tarefa</th>
+                    <th>Pet</th>
+                    <th>Início</th>
+                    <th>Ocorrências</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reservation.tasks.length ? reservation.tasks.map((task) => (
+                    <tr key={task.id}>
+                      <td>
+                        <strong>{task.title}</strong>
+                        {task.description ? <div className="muted">{task.description}</div> : null}
+                      </td>
+                      <td>{task.pet ? <Link href={`/pets/${task.pet.id}/ficha`}>{task.pet.name}</Link> : "-"}</td>
+                      <td className="mono subtle">{formatDateTimeShort(task.taskDate)}</td>
+                      <td className="muted">
+                        {task.endsAt ? `Até ${formatDateTimeShort(task.endsAt)}` : `${task.occurrences.length} ocorrência`}
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={4} className="muted">Nenhuma tarefa vinculada a esta reserva.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="card__header">
+              <div>
                 <div className="card__title"><CreditCard /> Pagamentos</div>
-                <div className="card__subtitle">Sinal sugerido, saldo e lancamentos financeiros</div>
+                <div className="card__subtitle">Sinal sugerido, saldo e lançamentos financeiros</div>
               </div>
             </div>
             <div className="card__body form-grid">
@@ -147,7 +196,7 @@ export default async function ReservationDetailPage({
                     <th>Data</th>
                     <th>Forma</th>
                     <th>Status</th>
-                    <th>Observacao</th>
+                    <th>Observação</th>
                     <th className="table__num">Valor</th>
                   </tr>
                 </thead>
@@ -155,7 +204,7 @@ export default async function ReservationDetailPage({
                   {reservation.payments.length ? reservation.payments.map((payment) => (
                     <tr key={payment.id}>
                       <td>{payment.paidAt ? formatDateTimeShort(payment.paidAt) : "-"}</td>
-                      <td>{payment.method}</td>
+                      <td>{payment.method === "CREDIT" ? "Credito" : payment.method}</td>
                       <td><StatusBadge status={payment.status} /></td>
                       <td className="muted">{payment.notes || "-"}</td>
                       <td className="table__num">{brl(payment.amountCents)}</td>
@@ -173,24 +222,21 @@ export default async function ReservationDetailPage({
           <section className="card">
             <div className="card__header">
               <div>
-                <div className="card__title"><Flag /> Acoes</div>
-                <div className="card__subtitle">Transicoes operacionais do MVP</div>
+                <div className="card__title"><Flag /> Ações</div>
+                <div className="card__subtitle">Transições operacionais da reserva</div>
               </div>
             </div>
             <div className="card__body stack" style={{ gap: 10 }}>
-              <form action={updateReservationStatusAction.bind(null, reservation.id, "CONFIRMED")}><button className="btn" type="submit"><CheckCircle2 /> Confirmar</button></form>
-              <form action={updateReservationStatusAction.bind(null, reservation.id, "IN_PROGRESS")}><button className="btn" type="submit"><PauseCircle /> Iniciar</button></form>
-              <form action={updateReservationStatusAction.bind(null, reservation.id, "COMPLETED")}><button className="btn" type="submit"><CheckCircle2 /> Concluir sem atraso</button></form>
-              <form action={updateReservationStatusAction.bind(null, reservation.id, "CANCELLED")}><button className="btn" type="submit"><XCircle /> Cancelar</button></form>
+              <ReservationStatusMenu reservationId={reservation.id} />
               <ConfirmForm
                 action={deleteReservation}
-                message="Excluir esta reserva? Pagamentos e tarefas vinculados tambem serao removidos."
+                message="Excluir esta reserva? Pagamentos e tarefas vinculados também serão removidos."
               >
                 <button
                   className="btn btn--danger"
                   type="submit"
                   disabled={!canDelete}
-                  title={canDelete ? "Excluir reserva" : "So e possivel excluir reservas pendentes ou canceladas"}
+                  title={canDelete ? "Excluir reserva" : "Só é possível excluir reservas pendentes ou canceladas"}
                 >
                   <XCircle /> Excluir reserva
                 </button>
@@ -207,7 +253,7 @@ export default async function ReservationDetailPage({
             </div>
             <form className="card__body stack" action={concludeWithLateFeeAction.bind(null, reservation.id)}>
               <label className="field">
-                <span className="field__label">Saida real</span>
+                <span className="field__label">Saída real</span>
                 <input className="input" name="actualEndedAt" type="datetime-local" defaultValue={toDatetimeLocalValue(reservation.endsAt)} />
               </label>
               <button className="btn btn--primary" type="submit">Calcular e concluir</button>
@@ -218,7 +264,7 @@ export default async function ReservationDetailPage({
             <div className="card__header">
               <div>
                 <div className="card__title"><CreditCard /> Registrar pagamento</div>
-                <div className="card__subtitle">Gera lancamento financeiro</div>
+                <div className="card__subtitle">Gera lançamento financeiro</div>
               </div>
             </div>
             <form className="card__body stack" action={registerPaymentAction.bind(null, reservation.id)}>
@@ -231,13 +277,41 @@ export default async function ReservationDetailPage({
                 <select className="select" name="method" defaultValue="PIX">
                   <option value="PIX">PIX</option>
                   <option value="CASH">Dinheiro</option>
-                  <option value="CARD">Cartao</option>
-                  <option value="TRANSFER">Transferencia</option>
+                  <option value="CARD">Cartão</option>
+                  <option value="TRANSFER">Transferência</option>
                   <option value="OTHER">Outro</option>
                 </select>
               </label>
-              <label className="field"><span className="field__label">Observacao</span><input className="input" name="notes" /></label>
+              <label className="field"><span className="field__label">Observação</span><input className="input" name="notes" /></label>
               <button className="btn btn--primary" type="submit">Registrar</button>
+            </form>
+          </section>
+
+          <section className="card">
+            <div className="card__header">
+              <div>
+                <div className="card__title"><CreditCard /> Usar crédito</div>
+                <div className="card__subtitle">Saldo do cliente: {brl(tutorCreditBalanceCents)}</div>
+              </div>
+            </div>
+            <form className="card__body stack" action={useCredit}>
+              <label className="field">
+                <span className="field__label">Valor a usar</span>
+                <input
+                  className="input"
+                  name="amountCents"
+                  defaultValue={usableCreditCents ? (usableCreditCents / 100).toFixed(2).replace(".", ",") : ""}
+                  disabled={usableCreditCents <= 0}
+                />
+              </label>
+              <button className="btn btn--primary" type="submit" disabled={usableCreditCents <= 0}>
+                Usar crédito na reserva
+              </button>
+              {usableCreditCents <= 0 ? (
+                <p className="subtle" style={{ fontSize: 11 }}>
+                  Não há crédito disponível ou saldo em aberto nesta reserva.
+                </p>
+              ) : null}
             </form>
           </section>
         </aside>

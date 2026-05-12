@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 import { boolField, optionalStringField, stringField } from "@/lib/forms";
 import { getPrisma } from "@/lib/db";
 
 export async function createPetAction(formData: FormData) {
+  await requireUser();
   const tutorId = stringField(formData, "tutorId");
   const name = stringField(formData, "name");
   if (!tutorId || !name) redirect("/pets?error=dados-obrigatorios");
@@ -35,6 +37,7 @@ export async function createPetAction(formData: FormData) {
 }
 
 export async function deletePetAction(id: string) {
+  await requireUser();
   const reservationLinks = await getPrisma().reservationPet.count({ where: { petId: id } });
   if (reservationLinks > 0) {
     redirect(`/pets/${id}/ficha?error=pet-em-reservas`);
@@ -52,6 +55,7 @@ export async function deletePetAction(id: string) {
 }
 
 export async function updatePetAction(id: string, formData: FormData) {
+  await requireUser();
   const name = stringField(formData, "name");
   if (!name) redirect(`/pets/${id}/ficha?error=nome-obrigatorio`);
 

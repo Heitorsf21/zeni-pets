@@ -2,54 +2,189 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { PaymentMethod } from "@/generated/prisma/client";
+import { requireUser } from "@/lib/auth";
+import { getTutorCreditBalance } from "@/lib/credits";
 import { getPrisma } from "@/lib/db";
 import { centsField, centsFieldStrict, optionalStringField, selectedValues, stringField } from "@/lib/forms";
 import { parseDatetimeLocal } from "@/lib/date";
 import {
+  calculatePriceRuleBaseCents,
+  hasTaxiPricing,
+  selectDefaultPriceRule,
+  selectDefaultTaxiRule,
+} from "@/lib/pricing";
+import { deriveInitialReservationStatus, derivePaymentStatus, sumPaidCents } from "@/lib/reservation-status";
+import {
+  calculateChargeableStayUnits,
   calculateLateFeeCents,
   calculateReservationTotals,
   calculateTaxiPetCents,
   isHighSeason,
 } from "@/lib/rules";
-import { upsertReservationEvent } from "@/lib/google/calendar";
+import { generateTaskOccurrenceDates } from "@/lib/tasks";
 
-async function calculateBaseAmount(serviceTypeId: string, petCount: number, startsAt: Date) {
+const PAYMENT_METHODS: PaymentMethod[] = ["PIX", "CASH", "CARD", "TRANSFER", "OTHER"];
+
+function asPaymentMethod(value: string): PaymentMethod {
+  return PAYMENT_METHODS.includes(value as PaymentMethod)
+    ? (value as PaymentMethod)
+    : "PIX";
+}
+
+async function calculateBaseAmount(input: {
+  serviceTypeId?: string;
+  priceRuleId?: string;
+  petCount: number;
+  startsAt: Date;
+  endsAt: Date;
+}) {
   const prisma = getPrisma();
-  const [serviceType, seasons, settings] = await Promise.all([
+  const [serviceType, taxiServiceTypes, seasons, settings] = await Promise.all([
     prisma.serviceType.findUnique({
-      where: { id: serviceTypeId },
-      include: { priceRules: { where: { isActive: true }, take: 1 } },
+      where: { id: input.serviceTypeId ?? "" },
+      include: {
+        priceRules: {
+          where: { isActive: true },
+          orderBy: [{ paymentMethod: "asc" }, { label: "asc" }],
+        },
+      },
+    }),
+    prisma.serviceType.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { kind: "TAXI_PET" },
+          {
+            priceRules: {
+              some: {
+                isActive: true,
+                OR: [
+                  { fixedFeeCents: { not: null } },
+                  { perKmCents: { not: null } },
+                  { hygieneFeeCents: { not: null } },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        priceRules: {
+          where: { isActive: true },
+          orderBy: [{ paymentMethod: "asc" }, { label: "asc" }],
+        },
+      },
+      orderBy: { name: "asc" },
     }),
     prisma.seasonPeriod.findMany({ where: { isActive: true } }),
     prisma.businessSettings.findUnique({ where: { singletonKey: "default" } }),
   ]);
 
-  const rule = serviceType?.priceRules[0];
-  if (!rule) return { baseAmountCents: 0, taxiRule: null, settings };
+  const ruleFromDirectSelection = input.priceRuleId
+    ? await prisma.servicePriceRule.findFirst({
+        where: {
+          id: input.priceRuleId,
+          isActive: true,
+          serviceType: { isActive: true },
+        },
+        include: { serviceType: true },
+      })
+    : null;
 
-  const highSeason = isHighSeason(startsAt, seasons);
-  const firstPet = highSeason
-    ? rule.highSeasonFirstPetCents ?? rule.firstPetCents
-    : rule.firstPetCents;
-  const additionalPet = highSeason
-    ? rule.highSeasonAdditionalCents ?? rule.additionalPetCents ?? 0
-    : rule.additionalPetCents ?? 0;
+  if (input.priceRuleId && !ruleFromDirectSelection) {
+    return { ok: false as const, reason: "regra-preco-invalida" };
+  }
+
+  if (ruleFromDirectSelection && input.serviceTypeId && ruleFromDirectSelection.serviceTypeId !== input.serviceTypeId) {
+    return { ok: false as const, reason: "regra-servico-incompativel" };
+  }
+
+  const selectedService = ruleFromDirectSelection?.serviceType ?? serviceType;
+  if (!selectedService?.isActive) {
+    return { ok: false as const, reason: "servico-inativo-ou-inexistente" };
+  }
+
+  const rule = ruleFromDirectSelection ?? selectDefaultPriceRule(serviceType?.priceRules ?? []);
+  if (!rule) return { ok: false as const, reason: "preco-nao-configurado" };
+
+  const highSeason = isHighSeason(input.startsAt, seasons);
+  const chargeableUnits = calculateChargeableStayUnits(input.startsAt, input.endsAt);
 
   return {
-    baseAmountCents: firstPet + Math.max(petCount - 1, 0) * additionalPet,
-    taxiRule: rule,
+    ok: true as const,
+    serviceTypeId: selectedService.id,
+    priceRule: rule,
+    pricingPaymentMethod: rule.paymentMethod,
+    chargeableUnits,
+    baseAmountCents: calculatePriceRuleBaseCents(rule, input.petCount, highSeason, chargeableUnits),
+    taxiRule: hasTaxiPricing(rule) ? rule : selectDefaultTaxiRule(taxiServiceTypes),
     settings,
   };
 }
 
+function distanceKmField(formData: FormData, key: string) {
+  const raw = stringField(formData, key);
+  if (!raw) return 0;
+
+  const parsed = Number(raw.replace(",", "."));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function optionalStringFromValue(value: FormDataEntryValue | undefined) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function reservationTaskDrafts(formData: FormData, input: {
+  startsAt: Date;
+  petIds: string[];
+}) {
+  const titles = formData.getAll("reservationTaskTitle");
+  if (!titles.length) return [];
+
+  const taskPetIds = formData.getAll("reservationTaskPetId");
+  const taskDates = formData.getAll("reservationTaskDate");
+  const taskEndsAt = formData.getAll("reservationTaskEndsAt");
+  const descriptions = formData.getAll("reservationTaskDescription");
+
+  return titles.map((rawTitle, index) => {
+    const title = optionalStringFromValue(rawTitle);
+    if (!title) redirect("/nova-reserva?error=tarefa-titulo-obrigatorio");
+
+    const rawPetId = typeof taskPetIds[index] === "string" ? String(taskPetIds[index]).trim() : "";
+    const petId = input.petIds.length === 1 ? input.petIds[0] : rawPetId;
+    if (!petId || !input.petIds.includes(petId)) {
+      redirect("/nova-reserva?error=tarefa-pet-obrigatorio");
+    }
+
+    const taskDate = parseDatetimeLocal(taskDates[index] ?? null) ?? input.startsAt;
+    const endsAt = parseDatetimeLocal(taskEndsAt[index] ?? null);
+    if (endsAt && endsAt.getTime() < taskDate.getTime()) {
+      redirect("/nova-reserva?error=datas-invalidas");
+    }
+
+    return {
+      title,
+      description: optionalStringFromValue(descriptions[index]),
+      taskDate,
+      endsAt,
+      petId,
+    };
+  });
+}
+
 export async function createReservationAction(formData: FormData) {
+  await requireUser();
   const tutorId = stringField(formData, "tutorId");
   const serviceTypeId = stringField(formData, "serviceTypeId");
-  const petIds = selectedValues(formData, "petIds");
+  const priceRuleId = stringField(formData, "priceRuleId");
+  const petIds = Array.from(new Set(selectedValues(formData, "petIds")));
   const startsAt = parseDatetimeLocal(formData.get("startsAt"));
   const endsAt = parseDatetimeLocal(formData.get("endsAt"));
 
-  if (!tutorId || !serviceTypeId || !petIds.length || !startsAt || !endsAt) {
+  if (!tutorId || (!serviceTypeId && !priceRuleId) || !petIds.length || !startsAt || !endsAt) {
     redirect("/nova-reserva?error=dados-obrigatorios");
   }
   if (endsAt.getTime() <= startsAt.getTime()) {
@@ -69,13 +204,26 @@ export async function createReservationAction(formData: FormData) {
   const pickupMode = stringField(formData, "pickupMode") === "ZENI_PICKUP"
     ? "ZENI_PICKUP"
     : "TUTOR_DROPS_OFF";
-  const base = await calculateBaseAmount(serviceTypeId, petIds.length, startsAt);
+  const base = await calculateBaseAmount({
+    serviceTypeId,
+    priceRuleId,
+    petCount: petIds.length,
+    startsAt,
+    endsAt,
+  });
+  if (!base.ok) redirect(`/nova-reserva?error=${base.reason}`);
+
+  const distanceKm = distanceKmField(formData, "distanceKm");
+  if (distanceKm == null) {
+    redirect("/nova-reserva?error=distancia-invalida");
+  }
+
   const taxiPetCents = calculateTaxiPetCents({
     pickupMode,
     fixedFeeCents: base.taxiRule?.fixedFeeCents ?? 0,
     perKmCents: base.taxiRule?.perKmCents ?? 0,
     hygieneFeeCents: base.taxiRule?.hygieneFeeCents ?? 0,
-    distanceKm: Number(stringField(formData, "distanceKm")) || 0,
+    distanceKm,
   });
 
   // Use strict parsing for the headline value: empty falls back to the rule price,
@@ -98,34 +246,62 @@ export async function createReservationAction(formData: FormData) {
     taxiPetCents,
     depositPercent: base.settings?.depositPercent ?? 50,
   });
+  const taskDrafts = reservationTaskDrafts(formData, { startsAt, petIds });
+  const initialStatus = deriveInitialReservationStatus({ startsAt, endsAt });
 
-  const reservation = await getPrisma().reservation.create({
-    data: {
-      tutorId,
-      serviceTypeId,
-      status: "CONFIRMED",
-      paymentStatus: "PENDING",
-      pickupMode,
-      startsAt,
-      endsAt,
-      notes: optionalStringField(formData, "notes"),
-      inviteTutor: formData.get("inviteTutor") === "on",
-      baseAmountCents,
-      discountCents,
-      additionalCents,
-      taxiPetCents,
-      totalCents: totals.totalCents,
-      depositSuggestedCents: totals.depositSuggestedCents,
-      depositDueCents: totals.depositDueCents,
-      balanceDueCents: totals.balanceDueCents,
-      reservationPets: {
-        create: petIds.map((petId, index) => ({
-          petId,
-          priceRole: index === 0 ? "first_pet" : "additional_pet",
-        })),
+  const reservation = await getPrisma().$transaction(async (tx) => {
+    const created = await tx.reservation.create({
+      data: {
+        tutorId,
+        serviceTypeId: base.serviceTypeId,
+        priceRuleId: base.priceRule.id,
+        pricingPaymentMethod: base.pricingPaymentMethod,
+        status: initialStatus,
+        paymentStatus: "PENDING",
+        pickupMode,
+        startsAt,
+        endsAt,
+        notes: optionalStringField(formData, "notes"),
+        inviteTutor: formData.get("inviteTutor") === "on",
+        baseAmountCents,
+        discountCents,
+        additionalCents,
+        taxiPetCents,
+        totalCents: totals.totalCents,
+        depositSuggestedCents: totals.depositSuggestedCents,
+        depositDueCents: totals.depositDueCents,
+        balanceDueCents: totals.balanceDueCents,
+        reservationPets: {
+          create: petIds.map((petId, index) => ({
+            petId,
+            priceRole: index === 0 ? "first_pet" : "additional_pet",
+          })),
+        },
       },
-    },
-    include: { tutor: true, serviceType: true, reservationPets: { include: { pet: true } } },
+      include: { tutor: true, serviceType: true, reservationPets: { include: { pet: true } } },
+    });
+
+    for (const taskDraft of taskDrafts) {
+      const occurrenceDates = generateTaskOccurrenceDates(taskDraft.taskDate, taskDraft.endsAt);
+      await tx.task.create({
+        data: {
+          title: taskDraft.title,
+          description: taskDraft.description,
+          taskDate: taskDraft.taskDate,
+          endsAt: taskDraft.endsAt,
+          status: "PENDING",
+          source: "MANUAL",
+          tutorId,
+          petId: taskDraft.petId,
+          reservationId: created.id,
+          occurrences: {
+            create: occurrenceDates.map((date) => ({ occurrenceDate: date })),
+          },
+        },
+      });
+    }
+
+    return created;
   });
 
   await syncReservationToGoogleIfConfigured(reservation.id);
@@ -133,6 +309,12 @@ export async function createReservationAction(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/agenda");
   revalidatePath("/financeiro");
+  if (taskDrafts.length) {
+    for (const petId of new Set(taskDrafts.map((task) => task.petId))) {
+      revalidatePath(`/pets/${petId}`);
+    }
+    revalidatePath(`/tutores/${tutorId}`);
+  }
   redirect(`/reservas/${reservation.id}`);
 }
 
@@ -140,6 +322,7 @@ export async function updateReservationStatusAction(
   id: string,
   status: "REQUESTED" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED",
 ) {
+  await requireUser();
   const reservation = await getPrisma().reservation.update({
     where: { id },
     data: { status },
@@ -153,15 +336,13 @@ export async function updateReservationStatusAction(
   }
 
   if (status === "COMPLETED") {
-    const paid = await getPrisma().payment.aggregate({
-      where: { reservationId: id, status: "PAID" },
-      _sum: { amountCents: true },
+    const payments = await getPrisma().payment.findMany({
+      where: { reservationId: id },
+      select: { status: true, amountCents: true },
     });
-    const paymentStatus =
-      (paid._sum.amountCents ?? 0) >= reservation.totalCents ? "PAID" : "PARTIAL";
     await getPrisma().reservation.update({
       where: { id },
-      data: { paymentStatus },
+      data: { paymentStatus: derivePaymentStatus(sumPaidCents(payments), reservation.totalCents) },
     });
   }
 
@@ -172,10 +353,11 @@ export async function updateReservationStatusAction(
 }
 
 export async function concludeWithLateFeeAction(id: string, formData: FormData) {
+  await requireUser();
   const actualEndedAt = parseDatetimeLocal(formData.get("actualEndedAt")) ?? new Date();
   const reservation = await getPrisma().reservation.findUnique({
     where: { id },
-    include: { reservationPets: true },
+    include: { reservationPets: true, payments: true },
   });
   if (!reservation) redirect("/agenda?error=reserva-nao-encontrada");
 
@@ -208,7 +390,7 @@ export async function concludeWithLateFeeAction(id: string, formData: FormData) 
       depositSuggestedCents: totals.depositSuggestedCents,
       depositDueCents: totals.depositDueCents,
       balanceDueCents: totals.balanceDueCents,
-      paymentStatus: "PARTIAL",
+      paymentStatus: derivePaymentStatus(sumPaidCents(reservation.payments), totals.totalCents),
     },
   });
 
@@ -219,10 +401,11 @@ export async function concludeWithLateFeeAction(id: string, formData: FormData) 
 }
 
 export async function registerPaymentAction(id: string, formData: FormData) {
+  await requireUser();
   const amountCents = centsFieldStrict(formData, "amountCents");
   if (amountCents == null || amountCents <= 0) redirect(`/reservas/${id}?error=valor-invalido`);
 
-  const method = stringField(formData, "method") || "PIX";
+  const method = asPaymentMethod(stringField(formData, "method"));
   const reservation = await getPrisma().reservation.findUnique({
     where: { id },
     include: { tutor: true, serviceType: true, payments: true },
@@ -233,7 +416,7 @@ export async function registerPaymentAction(id: string, formData: FormData) {
     data: {
       reservationId: id,
       amountCents,
-      method: method as "PIX" | "CASH" | "CARD" | "TRANSFER" | "OTHER",
+      method,
       status: "PAID",
       paidAt: new Date(),
       notes: optionalStringField(formData, "notes"),
@@ -248,16 +431,14 @@ export async function registerPaymentAction(id: string, formData: FormData) {
       description: `Pagamento - ${reservation.tutor.name}`,
       entryDate: new Date(),
       amountCents,
-      method: method as "PIX" | "CASH" | "CARD" | "TRANSFER" | "OTHER",
+      method,
     },
   });
 
-  const paid = reservation.payments.reduce((sum, payment) => sum + payment.amountCents, 0) + amountCents;
+  const paid = sumPaidCents(reservation.payments) + amountCents;
   await getPrisma().reservation.update({
     where: { id },
-    data: {
-      paymentStatus: paid >= reservation.totalCents ? "PAID" : "PARTIAL",
-    },
+    data: { paymentStatus: derivePaymentStatus(paid, reservation.totalCents) },
   });
 
   revalidatePath("/dashboard");
@@ -265,7 +446,87 @@ export async function registerPaymentAction(id: string, formData: FormData) {
   revalidatePath(`/reservas/${id}`);
 }
 
+export async function useTutorCreditAction(id: string, formData: FormData) {
+  await requireUser();
+  const amountCents = centsFieldStrict(formData, "amountCents");
+  if (amountCents == null || amountCents <= 0) redirect(`/reservas/${id}?error=valor-invalido`);
+
+  const prisma = getPrisma();
+  const result = await prisma.$transaction(async (tx) => {
+    const reservation = await tx.reservation.findUnique({
+      where: { id },
+      include: { tutor: true, serviceType: true, payments: true },
+    });
+    if (!reservation) return { ok: false as const, reason: "reserva-nao-encontrada" };
+
+    const balance = await getTutorCreditBalance(tx, reservation.tutorId);
+    const paidCents = reservation.payments
+      .filter((payment) => payment.status === "PAID")
+      .reduce((total, payment) => total + payment.amountCents, 0);
+    const remainingCents = Math.max(reservation.totalCents - paidCents, 0);
+
+    if (amountCents > balance || amountCents > remainingCents) {
+      return { ok: false as const, reason: "credito-insuficiente" };
+    }
+
+    await tx.payment.create({
+      data: {
+        reservationId: id,
+        amountCents,
+        method: "CREDIT",
+        status: "PAID",
+        paidAt: new Date(),
+        notes: "Uso de crédito do cliente",
+      },
+    });
+
+    await tx.financialEntry.create({
+      data: {
+        reservationId: id,
+        kind: "INCOME",
+        category: reservation.serviceType.name,
+        description: `Uso de crédito - ${reservation.tutor.name}`,
+        entryDate: new Date(),
+        amountCents,
+        method: "CREDIT",
+      },
+    });
+
+    await tx.tutorCreditTransaction.create({
+      data: {
+        tutorId: reservation.tutorId,
+        reservationId: id,
+        type: "CREDIT_USED",
+        amountCents: -amountCents,
+        description: `Crédito usado na reserva ${reservation.serviceType.name}`,
+        entryDate: new Date(),
+      },
+    });
+
+    const newPaidCents = paidCents + amountCents;
+    await tx.reservation.update({
+      where: { id },
+      data: { paymentStatus: derivePaymentStatus(newPaidCents, reservation.totalCents) },
+    });
+
+    return { ok: true as const, tutorId: reservation.tutorId };
+  });
+
+  if (!result.ok) {
+    redirect(`/reservas/${id}?error=${result.reason}`);
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/financeiro");
+  revalidatePath("/tutores");
+  revalidatePath(`/tutores/${result.tutorId}`);
+  revalidatePath(`/tutores/${result.tutorId}/ficha`);
+  revalidatePath(`/reservas/${id}`);
+  redirect(`/reservas/${id}?saved=credit`);
+}
+
 export async function deleteReservationAction(id: string) {
+  await requireUser();
   const reservation = await getPrisma().reservation.findUnique({
     where: { id },
     select: { status: true, googleEventId: true, googleCalendarId: true },
@@ -322,6 +583,7 @@ async function syncReservationToGoogleIfConfigured(reservationId: string) {
   if (!reservation) return;
 
   try {
+    const { upsertReservationEvent } = await import("@/lib/google/calendar");
     const event = await upsertReservationEvent({
       tokens: connection,
       calendarId: connection.googleCalendarId,

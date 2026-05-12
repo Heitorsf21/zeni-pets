@@ -90,7 +90,7 @@ export async function previewMergeTutorsAction(ids: string[]): Promise<TutorMerg
   });
 
   if (tutors.length !== unique.length) {
-    return { ok: false, error: "Um ou mais tutores selecionados nao foram encontrados." };
+    return { ok: false, error: "Um ou mais tutores selecionados não foram encontrados." };
   }
 
   const sorted = [...tutors].sort(tutorCanonicalSort);

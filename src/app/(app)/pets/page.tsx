@@ -19,7 +19,7 @@ export default async function PetsPage({
     <>
       <Topbar
         title="Pets"
-        subtitle="Ficha, saude, alimentacao e comportamento"
+        subtitle="Ficha, saúde, alimentação e comportamento"
         actions={<NovoPetModal tutors={tutorOptions} />}
       />
       <div className="content stack">
@@ -46,8 +46,8 @@ export default async function PetsPage({
                     {pet.breed} - {pet.age}
                   </div>
                   <div className="row">
-                    <span className="badge badge--ativo">{pet.neutered ? "Castrado" : "Nao castrado"}</span>
-                    <span className="badge">{pet.sociable ? "Sociavel" : "Reservado"}</span>
+                    <span className="badge badge--ativo">{pet.neutered ? "Castrado" : "Não castrado"}</span>
+                    <span className="badge">{pet.sociable ? "Sociável" : "Reservado"}</span>
                   </div>
                   <Link className="btn" href={`/pets/${pet.id}/ficha`}>Ver ficha</Link>
                 </div>

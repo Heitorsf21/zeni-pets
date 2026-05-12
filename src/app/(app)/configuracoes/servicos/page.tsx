@@ -20,15 +20,15 @@ const KIND_LABELS: Record<string, string> = {
   PET_SITTING: "Pet sitter",
   DOG_WALKER: "Dog walker",
   TAXI_PET: "Taxi pet",
-  ADAPTATION: "Adaptacao",
+  ADAPTATION: "Adaptação",
   OTHER: "Outro",
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
   PIX: "PIX",
   CASH: "Dinheiro",
-  CARD: "Cartao",
-  TRANSFER: "Transferencia",
+  CARD: "Cartão",
+  TRANSFER: "Transferência",
   OTHER: "Outro",
 };
 
@@ -51,8 +51,8 @@ export default async function ServicosPage({
   return (
     <>
       <Topbar
-        title="Servicos e precos"
-        subtitle="Gerencie tipos de servico, regras de preco e taxas adicionais"
+        title="Serviços e preços"
+        subtitle="Gerencie tipos de serviço, regras de preço e taxas adicionais"
         actions={<Link className="btn" href="/configuracoes">Voltar</Link>}
       />
       <div className="content stack">
@@ -62,7 +62,7 @@ export default async function ServicosPage({
           <div className="card__header">
             <div>
               <div className="card__title"><Plus /> Novo tipo de servico</div>
-              <div className="card__subtitle">Cadastre uma categoria antes de criar regras de preco</div>
+              <div className="card__subtitle">Cadastre uma categoria antes de criar regras de preço</div>
             </div>
           </div>
           <form className="card__body form-grid" action={createServiceTypeAction}>
@@ -79,7 +79,7 @@ export default async function ServicosPage({
               </select>
             </label>
             <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span className="field__label">Descricao</span>
+              <span className="field__label">Descrição</span>
               <input className="input" name="description" />
             </label>
             <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>
@@ -121,7 +121,7 @@ export default async function ServicosPage({
                 </select>
               </label>
               <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <span className="field__label">Descricao</span>
+                <span className="field__label">Descrição</span>
                 <input className="input" name="description" defaultValue={service.description ?? ""} />
               </label>
               <label className="check">
@@ -145,7 +145,7 @@ export default async function ServicosPage({
                     <th className="table__num">Taxi base</th>
                     <th className="table__num">Por km</th>
                     <th className="table__num">Higiene</th>
-                    <th aria-label="Acoes" />
+                    <th aria-label="Ações" />
                   </tr>
                 </thead>
                 <tbody>
@@ -172,7 +172,7 @@ export default async function ServicosPage({
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={10} className="muted">Sem regras de preco para este servico.</td></tr>
+                    <tr><td colSpan={10} className="muted">Sem regras de preço para este serviço.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -180,7 +180,7 @@ export default async function ServicosPage({
 
             <details className="card__body">
               <summary className="card__title" style={{ cursor: "pointer", marginBottom: 8 }}>
-                <Plus style={{ display: "inline", verticalAlign: "middle", width: 14 }} /> Nova regra de preco
+                <Plus style={{ display: "inline", verticalAlign: "middle", width: 14 }} /> Nova regra de preço
               </summary>
               <form className="form-grid" action={createPriceRuleAction} style={{ marginTop: 12 }}>
                 <input type="hidden" name="serviceTypeId" value={service.id} />

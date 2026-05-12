@@ -2,8 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import {
   CalendarClock,
   CalendarDays,
@@ -18,6 +18,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { logoutAction } from "@/app/(app)/auth-actions";
+import { refreshReservationStatusesAction } from "@/app/(app)/reservation-lifecycle-actions";
 
 const nav = [
   { href: "/dashboard", id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -29,8 +30,8 @@ const nav = [
 ];
 
 const systemNav = [
-  { href: "/configuracoes", id: "configuracoes", label: "Configuracoes", icon: Settings },
-  { href: "/importacao", id: "importacao", label: "Importacao", icon: ClipboardList },
+  { href: "/configuracoes", id: "configuracoes", label: "Configurações", icon: Settings },
+  { href: "/importacao", id: "importacao", label: "Importação", icon: ClipboardList },
 ];
 
 const SIDEBAR_STORAGE_KEY = "zeni-sidebar-collapsed";
@@ -91,6 +92,7 @@ export function AppShell({
   user: ShellUser;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const collapsed = useSyncExternalStore(
     subscribeSidebar,
     readSidebarCollapsed,
@@ -105,6 +107,31 @@ export function AppShell({
     tutores: counts.tutores,
     pets: counts.pets,
   };
+
+  useEffect(() => {
+    let disposed = false;
+    let running = false;
+
+    async function refreshStatuses() {
+      if (document.visibilityState === "hidden" || running) return;
+      running = true;
+      try {
+        const result = await refreshReservationStatusesAction();
+        if (!disposed && result.updated > 0) router.refresh();
+      } finally {
+        running = false;
+      }
+    }
+
+    const interval = window.setInterval(refreshStatuses, 60_000);
+    window.addEventListener("visibilitychange", refreshStatuses);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      window.removeEventListener("visibilitychange", refreshStatuses);
+    };
+  }, [router]);
 
   return (
     <div className="app" data-sidebar={collapsed ? "collapsed" : "expanded"}>
@@ -128,7 +155,7 @@ export function AppShell({
           </button>
         </div>
 
-        <div className="sidebar__section-label">Operacao</div>
+        <div className="sidebar__section-label">Operação</div>
         {nav.map((item) => {
           const Icon = item.icon;
           const active = pathname.startsWith(item.href);
@@ -167,7 +194,7 @@ export function AppShell({
         <div className="sidebar__user">
           <div className="sidebar__user-avatar">{user ? userInitials(user.name) : "?"}</div>
           <div className="sidebar__user-info">
-            <div className="sidebar__user-name">{user?.name ?? "Usuario"}</div>
+            <div className="sidebar__user-name">{user?.name ?? "Usuário"}</div>
             <div className="sidebar__user-role">{user ? ROLE_LABEL[user.role] : ""}</div>
           </div>
           <form action={logoutAction}>

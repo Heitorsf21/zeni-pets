@@ -77,11 +77,11 @@ export function EditarTutorModal({
           />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Endereco</span>
+          <span className="field__label">Endereço</span>
           <textarea className="textarea" name="address" defaultValue={tutor.address ?? ""} />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Observacoes</span>
+          <span className="field__label">Observações</span>
           <textarea className="textarea" name="notes" defaultValue={tutor.notes ?? ""} />
         </label>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>
@@ -96,7 +96,7 @@ export function EditarTutorModal({
         </form>
         <ConfirmForm
           action={deleteAction}
-          message={`Excluir o tutor ${tutor.name}? Essa acao nao pode ser desfeita.`}
+          message={`Excluir o tutor ${tutor.name}? Essa ação não pode ser desfeita.`}
         >
           <button
             className="btn btn--danger"

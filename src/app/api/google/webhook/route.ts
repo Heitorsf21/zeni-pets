@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/db";
-import { listChangedEvents } from "@/lib/google/calendar";
+import {
+  GoogleSyncTokenExpiredError,
+  listChangedEvents,
+  verifyGoogleChannelToken,
+} from "@/lib/google/calendar";
 
 export async function POST(request: NextRequest) {
   const channelId = request.headers.get("x-goog-channel-id");
   const resourceId = request.headers.get("x-goog-resource-id");
+  const channelToken = request.headers.get("x-goog-channel-token");
 
   const connection = await getPrisma().googleCalendarConnection.findFirst({
     where: {
@@ -18,11 +23,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  const changes = await listChangedEvents({
-    tokens: connection,
-    calendarId: connection.googleCalendarId,
-    syncToken: connection.googleSyncToken,
-  });
+  if (!verifyGoogleChannelToken({
+    googleChannelTokenCipher: connection.googleChannelTokenCipher,
+    headerToken: channelToken,
+  })) {
+    return NextResponse.json({ ok: false, error: "Canal Google inválido" }, { status: 401 });
+  }
+
+  let fullResync = false;
+  let changes;
+  try {
+    changes = await listChangedEvents({
+      tokens: connection,
+      calendarId: connection.googleCalendarId,
+      syncToken: connection.googleSyncToken,
+    });
+  } catch (error) {
+    if (!(error instanceof GoogleSyncTokenExpiredError)) throw error;
+    fullResync = true;
+    changes = await listChangedEvents({
+      tokens: connection,
+      calendarId: connection.googleCalendarId,
+      syncToken: null,
+    });
+  }
 
   for (const event of changes.events) {
     const reservationId = event.extendedProperties?.private?.zeniReservationId;
@@ -31,14 +55,16 @@ export async function POST(request: NextRequest) {
     const startsAt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
     const endsAt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
 
-    await getPrisma().reservation.update({
+    await getPrisma().reservation.updateMany({
       where: { id: reservationId },
       data: {
         ...(startsAt ? { startsAt } : {}),
         ...(endsAt ? { endsAt } : {}),
-        ...(event.status === "cancelled" ? { status: "CANCELLED" } : {}),
+        ...(event.status === "cancelled" ? { status: "CANCELLED", paymentStatus: "CANCELLED" } : {}),
         googleEventEtag: event.etag ?? undefined,
         googleLastSyncedAt: new Date(),
+        syncConflict: false,
+        syncConflictReason: null,
       },
     });
   }
@@ -51,5 +77,5 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  return NextResponse.json({ ok: true, changed: changes.events.length });
+  return NextResponse.json({ ok: true, changed: changes.events.length, fullResync });
 }

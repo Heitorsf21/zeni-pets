@@ -15,6 +15,14 @@ export type ReservationTotalInput = {
   depositPercent?: number;
 };
 
+const DAY_MS = 86_400_000;
+
+export function calculateChargeableStayUnits(startsAt: Date, endsAt: Date) {
+  const diffMs = endsAt.getTime() - startsAt.getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return 0;
+  return Math.max(Math.ceil(diffMs / DAY_MS), 1);
+}
+
 export function calculateDepositPlan(totalCents: number, depositPercent = 50) {
   const depositSuggestedCents = Math.round((totalCents * depositPercent) / 100);
   return {

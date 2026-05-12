@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { consumeGoogleOAuthState, getSessionUserId } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { exchangeGoogleCode, getGoogleAccountEmail, serializeTokens } from "@/lib/google/calendar";
 
 export async function GET(request: NextRequest) {
+  if (!(await getSessionUserId())) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  const state = request.nextUrl.searchParams.get("state");
+  if (!(await consumeGoogleOAuthState(state))) {
+    return NextResponse.redirect(new URL("/configuracoes?google=invalid-state", request.url));
+  }
+
   const code = request.nextUrl.searchParams.get("code");
   if (!code) {
     return NextResponse.redirect(new URL("/configuracoes?google=missing-code", request.url));

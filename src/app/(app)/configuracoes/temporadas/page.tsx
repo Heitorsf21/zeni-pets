@@ -27,7 +27,7 @@ export default async function TemporadasPage({
     <>
       <Topbar
         title="Temporadas"
-        subtitle="Janelas de alta temporada que aplicam precos diferenciados"
+        subtitle="Janelas de alta temporada que aplicam preços diferenciados"
         actions={<Link className="btn" href="/configuracoes">Voltar</Link>}
       />
       <div className="content stack">
@@ -37,7 +37,7 @@ export default async function TemporadasPage({
           <div className="card__header">
             <div>
               <div className="card__title"><Plus /> Nova temporada</div>
-              <div className="card__subtitle">Criar uma janela em que os precos de alta temporada sao aplicados</div>
+              <div className="card__subtitle">Criar uma janela em que os preços de alta temporada são aplicados</div>
             </div>
           </div>
           <form className="card__body form-grid" action={createSeasonAction}>
@@ -46,7 +46,7 @@ export default async function TemporadasPage({
               <input className="input" name="name" placeholder="Carnaval 2026" required />
             </label>
             <label className="field">
-              <span className="field__label">Inicio</span>
+              <span className="field__label">Início</span>
               <input className="input" name="startsAt" type="date" required />
             </label>
             <label className="field">
@@ -57,7 +57,7 @@ export default async function TemporadasPage({
               <input type="checkbox" name="isActive" defaultChecked /> Ativa
             </label>
             <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span className="field__label">Observacoes</span>
+              <span className="field__label">Observações</span>
               <input className="input" name="notes" />
             </label>
             <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>
@@ -78,10 +78,10 @@ export default async function TemporadasPage({
               <thead>
                 <tr>
                   <th>Nome</th>
-                  <th>Inicio</th>
+                  <th>Início</th>
                   <th>Termino</th>
                   <th>Ativa</th>
-                  <th aria-label="Acoes" />
+                  <th aria-label="Ações" />
                 </tr>
               </thead>
               <tbody>
@@ -90,7 +90,7 @@ export default async function TemporadasPage({
                     <td>{season.name}</td>
                     <td className="mono">{formatDateShort(season.startsAt)}</td>
                     <td className="mono">{formatDateShort(season.endsAt)}</td>
-                    <td>{season.isActive ? "Sim" : "Nao"}</td>
+                    <td>{season.isActive ? "Sim" : "Não"}</td>
                     <td>
                       <ConfirmForm
                         action={deleteSeasonAction.bind(null, season.id)}
@@ -119,7 +119,7 @@ export default async function TemporadasPage({
                       <input className="input" name="name" defaultValue={season.name} required />
                     </label>
                     <label className="field">
-                      <span className="field__label">Inicio</span>
+                      <span className="field__label">Início</span>
                       <input className="input" name="startsAt" type="date" defaultValue={dateInputValue(season.startsAt)} required />
                     </label>
                     <label className="field">
@@ -130,7 +130,7 @@ export default async function TemporadasPage({
                       <input type="checkbox" name="isActive" defaultChecked={season.isActive} /> Ativa
                     </label>
                     <label className="field" style={{ gridColumn: "1 / -1" }}>
-                      <span className="field__label">Observacoes</span>
+                      <span className="field__label">Observações</span>
                       <input className="input" name="notes" defaultValue={season.notes ?? ""} />
                     </label>
                     <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>

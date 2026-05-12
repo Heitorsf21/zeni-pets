@@ -23,7 +23,7 @@ export default async function ConfiguracoesPage({
 
   return (
     <>
-      <Topbar title="Configuracoes" subtitle="Servicos, valores, calendario e dados da empresa" />
+      <Topbar title="Configurações" subtitle="Serviços, valores, calendário e dados da empresa" />
       {(sp.error || sp.saved || sp.google) ? (
         <div className="content stack" style={{ paddingBottom: 0 }}>
           <FlashMessage error={sp.error} saved={sp.saved} google={sp.google} />
@@ -43,10 +43,10 @@ export default async function ConfiguracoesPage({
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Servico</th>
+                    <th>Serviço</th>
                     <th>Detalhes</th>
                     <th>PIX</th>
-                    <th>Cartao</th>
+                    <th>Cartão</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -67,7 +67,7 @@ export default async function ConfiguracoesPage({
             <div className="card__header">
               <div>
                 <div className="card__title">Capacidade e horarios</div>
-                <div className="card__subtitle">Configuracoes usadas em agenda e calculos</div>
+                <div className="card__subtitle">Configurações usadas em agenda e cálculos</div>
               </div>
             </div>
             <form className="card__body form-grid" action={updateBusinessSettingsAction}>
@@ -75,7 +75,7 @@ export default async function ConfiguracoesPage({
               <label className="field"><span className="field__label">Responsavel</span><input className="input" name="ownerName" defaultValue={settings?.ownerName ?? "Fernanda Zeni"} /></label>
               <label className="field"><span className="field__label">Telefone</span><input className="input" name="phone" defaultValue={settings?.phone ?? ""} /></label>
               <label className="field"><span className="field__label">Instagram</span><input className="input" name="instagram" defaultValue={settings?.instagram ?? ""} /></label>
-              <label className="field" style={{ gridColumn: "1 / -1" }}><span className="field__label">Endereco</span><input className="input" name="address" defaultValue={settings?.address ?? ""} /></label>
+              <label className="field" style={{ gridColumn: "1 / -1" }}><span className="field__label">Endereço</span><input className="input" name="address" defaultValue={settings?.address ?? ""} /></label>
               <label className="field"><span className="field__label">Vagas no hotelzinho</span><input className="input" name="boardingCapacity" defaultValue={settings?.boardingCapacity ?? 12} /></label>
               <label className="field"><span className="field__label">Vagas na creche</span><input className="input" name="daycareCapacity" defaultValue={settings?.daycareCapacity ?? 8} /></label>
               <label className="field"><span className="field__label">Check-in padrao</span><input className="input" name="defaultCheckInTime" defaultValue={settings?.defaultCheckInTime ?? "10:00"} /></label>
@@ -99,7 +99,7 @@ export default async function ConfiguracoesPage({
                   {config.googleConnection
                     ? config.googleConnection.googleCalendarId
                       ? `Conectado a ${config.googleConnection.googleCalendarId}`
-                      : "Conta conectada, sem calendario escolhido"
+                      : "Conta conectada, sem calendário escolhido"
                     : "Sem conta Google conectada"}
                 </div>
               </div>
@@ -150,7 +150,7 @@ export default async function ConfiguracoesPage({
                     defaultValue={config.googleConnection?.googleCalendarId ?? ""}
                     disabled={!config.googleCalendars.length}
                   >
-                    <option value="">Selecione um calendario</option>
+                    <option value="">Selecione um calendário</option>
                     {config.googleConnection?.googleCalendarId && !config.googleCalendars.some((calendar) => calendar.id === config.googleConnection?.googleCalendarId) ? (
                       <option value={config.googleConnection.googleCalendarId}>{config.googleConnection.googleCalendarId}</option>
                     ) : null}
@@ -161,7 +161,7 @@ export default async function ConfiguracoesPage({
                     ))}
                   </select>
                 </label>
-                <button className="btn" type="submit" disabled={!config.googleCalendars.length}>Salvar calendario</button>
+                <button className="btn" type="submit" disabled={!config.googleCalendars.length}>Salvar calendário</button>
               </form>
               <form action={syncFutureReservationsToGoogleAction}>
                 <button className="btn" type="submit" disabled={!config.googleConnection?.googleCalendarId}>
@@ -201,7 +201,7 @@ export default async function ConfiguracoesPage({
             </div>
             <div className="card__body stack" style={{ gap: 10 }}>
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                Janelas em que precos de alta temporada sao aplicados aos servicos.
+                Janelas em que preços de alta temporada são aplicados aos serviços.
               </p>
               <Link className="btn" href="/configuracoes/temporadas">Gerenciar temporadas</Link>
             </div>
@@ -209,13 +209,13 @@ export default async function ConfiguracoesPage({
 
           <section className="card">
             <div className="card__header">
-              <div className="card__title">Importacao</div>
+              <div className="card__title">Importação</div>
             </div>
             <div className="card__body stack" style={{ gap: 10 }}>
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                Dados antigos entram em staging para revisao antes de qualquer tabela final.
+                Dados antigos entram em staging para revisão antes de qualquer tabela final.
               </p>
-              <a className="btn" href="/importacao">Abrir revisao</a>
+              <a className="btn" href="/importacao">Abrir revisão</a>
               <a className="btn" href="/api/import/preview">Ver preview JSON</a>
             </div>
           </section>

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveInitialReservationStatus,
   derivePaymentStatus,
   deriveReservationStatus,
+  shouldAutoStartReservation,
   sumPaidCents,
 } from "@/lib/reservation-status";
 
@@ -200,5 +202,83 @@ describe("deriveReservationStatus — cancelled", () => {
       cancelled: true,
     });
     expect(out.status).toBe("CANCELLED");
+  });
+});
+
+describe("automatic reservation lifecycle", () => {
+  it("auto-starts requested or confirmed reservations inside their period", () => {
+    expect(
+      shouldAutoStartReservation({
+        now: NOW,
+        startsAt: days(-2),
+        endsAt: days(3),
+        currentStatus: "CONFIRMED",
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldAutoStartReservation({
+        now: NOW,
+        startsAt: days(-2),
+        endsAt: days(3),
+        currentStatus: "REQUESTED",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not auto-start future, finished, completed or cancelled reservations", () => {
+    expect(
+      shouldAutoStartReservation({
+        now: NOW,
+        startsAt: days(1),
+        endsAt: days(3),
+        currentStatus: "CONFIRMED",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldAutoStartReservation({
+        now: NOW,
+        startsAt: days(-3),
+        endsAt: days(-1),
+        currentStatus: "CONFIRMED",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldAutoStartReservation({
+        now: NOW,
+        startsAt: days(-1),
+        endsAt: days(1),
+        currentStatus: "COMPLETED",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldAutoStartReservation({
+        now: NOW,
+        startsAt: days(-1),
+        endsAt: days(1),
+        currentStatus: "CANCELLED",
+      }),
+    ).toBe(false);
+  });
+
+  it("creates a reservation already in progress when start has passed", () => {
+    expect(
+      deriveInitialReservationStatus({
+        now: NOW,
+        startsAt: days(-2),
+        endsAt: days(3),
+      }),
+    ).toBe("IN_PROGRESS");
+
+    expect(
+      deriveInitialReservationStatus({
+        now: NOW,
+        startsAt: days(2),
+        endsAt: days(3),
+      }),
+    ).toBe("CONFIRMED");
   });
 });

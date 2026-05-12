@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
@@ -14,7 +14,7 @@ const PET_NAME_UPDATED = "Audit Pet E2E Atualizado";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "Fernanda";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Zenipets";
 
-async function login(page) {
+async function login(page: Page) {
   await page.goto("/login");
   await page.fill('input[name="identifier"]', ADMIN_USERNAME);
   await page.fill('input[name="password"]', ADMIN_PASSWORD);
@@ -123,9 +123,7 @@ test("AUDIT 08: create reservation via modal", async ({ page }) => {
   await page.getByRole("button", { name: "Nova reserva" }).first().click();
   const dialog = page.locator("dialog[open]");
   await dialog.locator('select[name="tutorId"]').selectOption({ label: TUTOR_NAME_UPDATED });
-  // The pets select filters by selected tutor in client; petLabel is just "Audit Pet E2E Atualizado - Audit Tutor E2E Atualizado"
-  const petOptionLabel = `${PET_NAME_UPDATED} - ${TUTOR_NAME_UPDATED}`;
-  await dialog.locator('select[name="petIds"]').selectOption({ label: petOptionLabel });
+  await dialog.getByLabel(PET_NAME_UPDATED).check();
   // pick the first Hospedagem service
   await dialog.locator('select[name="serviceTypeId"]').selectOption({ index: 0 });
   await dialog.locator('input[name="startsAt"]').fill("2026-06-01T10:00");
@@ -221,8 +219,7 @@ test("AUDIT 16: rejects mismatched dates on new reservation", async ({ page }) =
   await page.getByRole("button", { name: "Nova reserva" }).first().click();
   const dialog = page.locator("dialog[open]");
   await dialog.locator('select[name="tutorId"]').selectOption({ label: TUTOR_NAME_UPDATED });
-  const petOptionLabel = `${PET_NAME_UPDATED} - ${TUTOR_NAME_UPDATED}`;
-  await dialog.locator('select[name="petIds"]').selectOption({ label: petOptionLabel });
+  await dialog.getByLabel(PET_NAME_UPDATED).check();
   await dialog.locator('select[name="serviceTypeId"]').selectOption({ index: 0 });
   await dialog.locator('input[name="startsAt"]').fill("2026-06-10T10:00");
   await dialog.locator('input[name="endsAt"]').fill("2026-06-01T18:00");
@@ -238,8 +235,7 @@ test("AUDIT 17: delete pending reservation works; completed reservation refuses"
   await page.getByRole("button", { name: "Nova reserva" }).first().click();
   const dialog = page.locator("dialog[open]");
   await dialog.locator('select[name="tutorId"]').selectOption({ label: TUTOR_NAME_UPDATED });
-  const petOptionLabel = `${PET_NAME_UPDATED} - ${TUTOR_NAME_UPDATED}`;
-  await dialog.locator('select[name="petIds"]').selectOption({ label: petOptionLabel });
+  await dialog.getByLabel(PET_NAME_UPDATED).check();
   await dialog.locator('select[name="serviceTypeId"]').selectOption({ index: 0 });
   await dialog.locator('input[name="startsAt"]').fill("2026-07-01T10:00");
   await dialog.locator('input[name="endsAt"]').fill("2026-07-02T18:00");

@@ -1,8 +1,9 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 export const SESSION_COOKIE = "zeni_session";
+export const GOOGLE_OAUTH_STATE_COOKIE = "zeni_google_oauth_state";
 
 function getAuthSecret() {
   return process.env.AUTH_SECRET || "dev-change-me-before-production";
@@ -63,4 +64,29 @@ export async function requireUser() {
   const userId = await getSessionUserId();
   if (!userId) redirect("/login");
   return userId;
+}
+
+export async function createGoogleOAuthState() {
+  const jar = await cookies();
+  const state = randomBytes(32).toString("base64url");
+  jar.set(GOOGLE_OAUTH_STATE_COOKIE, state, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 10 * 60,
+  });
+  return state;
+}
+
+export async function consumeGoogleOAuthState(expectedState: string | null) {
+  const jar = await cookies();
+  const storedState = jar.get(GOOGLE_OAUTH_STATE_COOKIE)?.value ?? null;
+  jar.delete(GOOGLE_OAUTH_STATE_COOKIE);
+  return Boolean(
+    expectedState &&
+      storedState &&
+      expectedState.length === storedState.length &&
+      timingSafeEqual(Buffer.from(expectedState), Buffer.from(storedState)),
+  );
 }

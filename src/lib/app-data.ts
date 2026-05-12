@@ -1,8 +1,11 @@
 import { getPrisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { getRuntimeSecretStatus } from "@/lib/crypto";
+import { getOpenCreditBalance } from "@/lib/credits";
 import { brl } from "@/lib/money";
-import { getGoogleEnvStatus, listGoogleCalendars } from "@/lib/google/calendar";
+import { sortPriceRules } from "@/lib/pricing";
+import { refreshReservationLifecycleStatuses, sumPaidCents } from "@/lib/reservation-status";
+import { getGoogleEnvStatus } from "@/lib/google/env";
 import {
   endOfDay,
   endOfMonth,
@@ -89,6 +92,7 @@ export async function getTutorsData() {
 
 export async function getTutorDetailData(id: string) {
   try {
+    await refreshReservationLifecycleStatuses();
     const tutor = await getPrisma().tutor.findUnique({
       where: { id },
       include: {
@@ -96,6 +100,9 @@ export async function getTutorDetailData(id: string) {
         reservations: {
           orderBy: { startsAt: "desc" },
           include: { serviceType: true, payments: true },
+        },
+        creditTransactions: {
+          orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
         },
       },
     });
@@ -132,6 +139,7 @@ function readSourcePayloadDate(payload: unknown, key: string): Date | null {
 
 export async function getPetsData() {
   try {
+    await refreshReservationLifecycleStatuses();
     const pets = await getPrisma().pet.findMany({
       orderBy: { createdAt: "desc" },
       include: { tutor: true, reservationPets: { include: { reservation: true } } },
@@ -141,7 +149,7 @@ export async function getPetsData() {
       id: pet.id,
       name: pet.name,
       tutor: pet.tutor.name,
-      breed: pet.breed ?? "Sem raca definida",
+      breed: pet.breed ?? "Sem raça definida",
       age: pet.ageLabel ?? "-",
       neutered: Boolean(pet.isNeutered),
       sociable: Boolean(pet.isSociable),
@@ -162,6 +170,7 @@ export async function getPetsData() {
 
 export async function getPetDetailData(id: string) {
   try {
+    await refreshReservationLifecycleStatuses();
     return await getPrisma().pet.findUnique({
       where: { id },
       include: {
@@ -180,21 +189,36 @@ export async function getPetDetailData(id: string) {
 
 export async function getReservationFormData() {
   try {
-    const [tutors, pets, serviceTypes, settings] = await Promise.all([
+    const [tutors, pets, serviceTypes, settings, seasonPeriods] = await Promise.all([
       getPrisma().tutor.findMany({ orderBy: { name: "asc" } }),
       getPrisma().pet.findMany({ include: { tutor: true }, orderBy: { name: "asc" } }),
       getPrisma().serviceType.findMany({
-        where: { isActive: true },
-        include: { priceRules: { where: { isActive: true } } },
+        where: { isActive: true, priceRules: { some: { isActive: true } } },
+        include: {
+          priceRules: {
+            where: { isActive: true },
+            orderBy: [{ paymentMethod: "asc" }, { label: "asc" }],
+          },
+        },
         orderBy: { name: "asc" },
       }),
       getBusinessSettingsData(),
+      getPrisma().seasonPeriod.findMany({ where: { isActive: true }, orderBy: { startsAt: "asc" } }),
     ]);
 
-    return { tutors, pets, serviceTypes, settings };
+    return {
+      tutors,
+      pets,
+      serviceTypes: serviceTypes.map((service) => ({
+        ...service,
+        priceRules: sortPriceRules(service.priceRules),
+      })),
+      settings,
+      seasonPeriods,
+    };
   } catch (error) {
     dbUnavailable("reservation form", error);
-    return { tutors: [], pets: [], serviceTypes: [], settings: null };
+    return { tutors: [], pets: [], serviceTypes: [], settings: null, seasonPeriods: [] };
   }
 }
 
@@ -202,6 +226,7 @@ export async function getReservationsByMonthData(year: number, month: number) {
   const start = new Date(year, month, 1, 0, 0, 0);
   const end = new Date(year, month + 1, 1, 0, 0, 0);
   try {
+    await refreshReservationLifecycleStatuses();
     const reservations = await getPrisma().reservation.findMany({
       where: {
         OR: [
@@ -240,6 +265,7 @@ export async function getUpcomingReservationsData(daysAhead = 14) {
   const now = new Date();
   const horizon = new Date(now.getTime() + daysAhead * 86_400_000);
   try {
+    await refreshReservationLifecycleStatuses(now);
     const reservations = await getPrisma().reservation.findMany({
       where: { startsAt: { gte: now, lte: horizon } },
       orderBy: { startsAt: "asc" },
@@ -268,7 +294,10 @@ export async function getUpcomingReservationsData(daysAhead = 14) {
   }
 }
 
+export type ReservationListScope = "upcoming" | "all";
+
 export type ReservationListFilters = {
+  scope?: ReservationListScope;
   status?: string[];
   paymentStatus?: string[];
   serviceTypeId?: string;
@@ -288,12 +317,13 @@ const RESERVATION_STATUSES = [
 ] as const;
 const RESERVATION_PAYMENT_STATUSES = ["PENDING", "PARTIAL", "PAID", "CANCELLED"] as const;
 
-const ACTIVE_STATUS_DEFAULT = ["CONFIRMED", "IN_PROGRESS"];
+const UPCOMING_STATUS_DEFAULT = ["REQUESTED", "CONFIRMED", "IN_PROGRESS"];
 
 export async function getReservationsListData(filters: ReservationListFilters = {}) {
   const pageSize = 20;
   const page = Math.max(filters.page ?? 1, 1);
-  const statusFilter = (filters.status ?? ACTIVE_STATUS_DEFAULT).filter((value) =>
+  const scope: ReservationListScope = filters.scope === "all" ? "all" : "upcoming";
+  const statusFilter = (filters.status ?? (scope === "upcoming" ? UPCOMING_STATUS_DEFAULT : [])).filter((value) =>
     (RESERVATION_STATUSES as readonly string[]).includes(value),
   );
   const paymentFilter = (filters.paymentStatus ?? []).filter((value) =>
@@ -304,11 +334,13 @@ export async function getReservationsListData(filters: ReservationListFilters = 
   const query = (filters.q ?? "").trim();
 
   try {
+    await refreshReservationLifecycleStatuses();
     const where: Record<string, unknown> = {};
     if (statusFilter.length) where.status = { in: statusFilter };
     if (paymentFilter.length) where.paymentStatus = { in: paymentFilter };
     if (filters.serviceTypeId) where.serviceTypeId = filters.serviceTypeId;
     if (filters.tutorId) where.tutorId = filters.tutorId;
+    if (scope === "upcoming") where.endsAt = { gte: startOfDay(new Date()) };
     if (fromDate && !Number.isNaN(fromDate.getTime())) where.startsAt = { gte: fromDate };
     if (toDate && !Number.isNaN(toDate.getTime())) {
       where.endsAt = { ...(where.endsAt as object ?? {}), lte: toDate };
@@ -329,7 +361,9 @@ export async function getReservationsListData(filters: ReservationListFilters = 
           serviceType: true,
           reservationPets: { include: { pet: true } },
         },
-        orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
+        orderBy: scope === "all"
+          ? [{ startsAt: "desc" }, { createdAt: "desc" }]
+          : [{ startsAt: "asc" }, { createdAt: "asc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -358,6 +392,7 @@ export async function getReservationsListData(filters: ReservationListFilters = 
       totalPages,
       total,
       filters: {
+        scope,
         status: statusFilter,
         paymentStatus: paymentFilter,
         serviceTypeId: filters.serviceTypeId ?? "",
@@ -380,6 +415,7 @@ export async function getReservationsListData(filters: ReservationListFilters = 
       totalPages: 1,
       total: 0,
       filters: {
+        scope,
         status: statusFilter,
         paymentStatus: paymentFilter,
         serviceTypeId: filters.serviceTypeId ?? "",
@@ -396,14 +432,33 @@ export async function getReservationsListData(filters: ReservationListFilters = 
 
 export async function getReservationDetailData(id: string) {
   try {
+    await refreshReservationLifecycleStatuses();
     return await getPrisma().reservation.findUnique({
       where: { id },
       include: {
-        tutor: true,
+        tutor: {
+          include: {
+            creditTransactions: {
+              orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
+            },
+          },
+        },
         serviceType: true,
+        priceRule: true,
         reservationPets: { include: { pet: true } },
         payments: { orderBy: { createdAt: "desc" } },
         financialEntries: { orderBy: { entryDate: "desc" } },
+        tasks: {
+          where: { status: { not: "CANCELLED" } },
+          include: {
+            pet: true,
+            occurrences: {
+              orderBy: { occurrenceDate: "asc" },
+              take: 14,
+            },
+          },
+          orderBy: [{ taskDate: "asc" }, { createdAt: "asc" }],
+        },
       },
     });
   } catch (error) {
@@ -465,7 +520,7 @@ async function getTodayTasksData(today = new Date()) {
     description: occurrence.task.description,
     done: occurrence.status === "DONE",
     rangeLabel: occurrence.task.endsAt
-      ? `Ate ${formatDateShort(occurrence.task.endsAt)}`
+      ? `Até ${formatDateShort(occurrence.task.endsAt)}`
       : null,
   }));
 }
@@ -502,6 +557,7 @@ export async function getDashboardData() {
   const monthEnd = endOfMonth(today);
 
   try {
+    await refreshReservationLifecycleStatuses(today);
     const [
       settings,
       activeReservations,
@@ -562,7 +618,7 @@ export async function getDashboardData() {
       .slice(0, 6);
 
     const pendingCents = pendingReservations.reduce((sum, reservation) => {
-      const paid = reservation.payments.reduce((total, payment) => total + payment.amountCents, 0);
+      const paid = sumPaidCents(reservation.payments);
       return sum + Math.max(reservation.totalCents - paid, 0);
     }, 0);
 
@@ -585,9 +641,9 @@ export async function getDashboardData() {
           icon: "Sun",
         },
         {
-          label: "Faturamento mes",
+          label: "Faturamento mês",
           value: brl(monthIncome._sum.amountCents ?? 0),
-          hint: "lancamentos pagos",
+          hint: "lançamentos pagos",
           icon: "Wallet",
           positive: true,
         },
@@ -610,19 +666,19 @@ export async function getDashboardData() {
     dbUnavailable("dashboard", error);
     return {
       metrics: [
-        { label: "Hospedados hoje", value: "0", hint: "banco indisponivel", icon: "Bed" },
-        { label: "Daycare hoje", value: "0", hint: "banco indisponivel", icon: "Sun" },
+        { label: "Hospedados hoje", value: "0", hint: "banco indisponível", icon: "Bed" },
+        { label: "Daycare hoje", value: "0", hint: "banco indisponível", icon: "Sun" },
         {
-          label: "Faturamento mes",
+          label: "Faturamento mês",
           value: brl(0),
-          hint: "banco indisponivel",
+          hint: "banco indisponível",
           positive: true,
           icon: "Wallet",
         },
         {
           label: "A receber",
           value: brl(0),
-          hint: "banco indisponivel",
+          hint: "banco indisponível",
           icon: "AlertCircle",
         },
       ],
@@ -641,6 +697,7 @@ export async function getUpcomingServicesData() {
   const now = new Date();
   const inTwoDays = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   try {
+    await refreshReservationLifecycleStatuses(now);
     const reservations = await getPrisma().reservation.findMany({
       where: {
         status: { in: ["REQUESTED", "CONFIRMED", "IN_PROGRESS"] },
@@ -668,31 +725,41 @@ export async function getUpcomingServicesData() {
   }
 }
 
-export async function getFinanceData(tab: "income" | "expense" | "all" = "all") {
-  const today = new Date();
-  const monthStart = startOfMonth(today);
-  const monthEnd = endOfMonth(today);
+export async function getFinanceData(
+  tab: "income" | "expense" | "all" = "all",
+  month?: string,
+) {
+  const referenceDate = parseFinanceMonth(month) ?? new Date();
+  const monthStart = startOfMonth(referenceDate);
+  const monthEnd = endOfMonth(referenceDate);
 
   try {
-    const [entries, pendingReservations] = await Promise.all([
-      getPrisma().financialEntry.findMany({
+    const prisma = getPrisma();
+    const [entries, pendingReservations, monthEntries, creditTransactions, openCreditBalance] = await Promise.all([
+      prisma.financialEntry.findMany({
         where: {
           entryDate: { gte: monthStart, lte: monthEnd },
           ...(tab === "income" ? { kind: "INCOME" } : tab === "expense" ? { kind: "EXPENSE" } : {}),
         },
         orderBy: { entryDate: "desc" },
       }),
-      getPrisma().reservation.findMany({
+      prisma.reservation.findMany({
         where: { paymentStatus: { in: ["PENDING", "PARTIAL"] } },
         include: { tutor: true, payments: true },
       }),
+      prisma.financialEntry.findMany({
+        where: { entryDate: { gte: monthStart, lte: monthEnd } },
+        select: { kind: true, amountCents: true },
+      }),
+      prisma.tutorCreditTransaction.findMany({
+        where: { entryDate: { gte: monthStart, lte: monthEnd } },
+        include: { tutor: { select: { id: true, name: true } } },
+        orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
+      }),
+      getOpenCreditBalance(prisma),
     ]);
 
     // Compute month metrics from full set (independent of tab filter)
-    const monthEntries = await getPrisma().financialEntry.findMany({
-      where: { entryDate: { gte: monthStart, lte: monthEnd } },
-      select: { kind: true, amountCents: true },
-    });
     const income = monthEntries
       .filter((entry) => entry.kind === "INCOME")
       .reduce((sum, entry) => sum + entry.amountCents, 0);
@@ -700,15 +767,30 @@ export async function getFinanceData(tab: "income" | "expense" | "all" = "all") 
       .filter((entry) => entry.kind === "EXPENSE")
       .reduce((sum, entry) => sum + entry.amountCents, 0);
     const pending = pendingReservations.reduce((sum, reservation) => {
-      const paid = reservation.payments.reduce((total, payment) => total + payment.amountCents, 0);
+      const paid = sumPaidCents(reservation.payments);
       return sum + Math.max(reservation.totalCents - paid, 0);
     }, 0);
+    const creditsReceived = creditTransactions
+      .filter((transaction) => transaction.type === "CREDIT_ADDED" && transaction.amountCents > 0)
+      .reduce((sum, transaction) => sum + transaction.amountCents, 0);
+    const creditsUsed = creditTransactions
+      .filter((transaction) => transaction.type === "CREDIT_USED")
+      .reduce((sum, transaction) => sum + Math.abs(transaction.amountCents), 0);
 
     return {
       tab,
-      monthLabel: formatMonthLabel(today),
+      monthValue: monthInputValue(referenceDate),
+      monthLabel: formatMonthLabel(referenceDate),
       monthEntriesCount: monthEntries.length,
-      metrics: { income, pending, expenses, profit: income - expenses },
+      metrics: {
+        income,
+        pending,
+        expenses,
+        profit: income - expenses,
+        creditsReceived,
+        creditsUsed,
+        creditOutstanding: openCreditBalance,
+      },
       entries: entries.map((entry) => ({
         id: entry.id,
         date: formatDateShort(entry.entryDate),
@@ -720,23 +802,62 @@ export async function getFinanceData(tab: "income" | "expense" | "all" = "all") 
         kind: entry.kind,
         isManual: entry.isManual,
       })),
+      creditTransactions: creditTransactions.map((transaction) => ({
+        id: transaction.id,
+        date: formatDateShort(transaction.entryDate),
+        tutor: transaction.tutor.name,
+        tutorId: transaction.tutor.id,
+        type: transaction.type,
+        typeLabel: transaction.type === "CREDIT_ADDED"
+          ? "Crédito recebido"
+          : transaction.type === "CREDIT_USED"
+            ? "Crédito usado"
+            : transaction.type === "REFUND"
+              ? "Reembolso"
+              : "Ajuste",
+        description: transaction.description ?? "-",
+        amount: brl(transaction.amountCents),
+      })),
       pendingReservations,
     };
   } catch (error) {
     dbUnavailable("finance", error);
     return {
       tab,
-      monthLabel: formatMonthLabel(new Date()),
+      monthValue: monthInputValue(referenceDate),
+      monthLabel: formatMonthLabel(referenceDate),
       monthEntriesCount: 0,
-      metrics: { income: 0, pending: 0, expenses: 0, profit: 0 },
+      metrics: {
+        income: 0,
+        pending: 0,
+        expenses: 0,
+        profit: 0,
+        creditsReceived: 0,
+        creditsUsed: 0,
+        creditOutstanding: 0,
+      },
       entries: [],
+      creditTransactions: [],
       pendingReservations: [],
     };
   }
 }
 
+function parseFinanceMonth(value?: string) {
+  const match = value?.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  return new Date(year, month - 1, 1);
+}
+
+function monthInputValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function formatMonthLabel(date: Date) {
-  const months = ["Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   return `${months[date.getMonth()]} ${date.getFullYear()}`;
 }
 
@@ -766,11 +887,12 @@ export async function getConfigData() {
         take: 5,
       }),
       googleConnection
-        ? listGoogleCalendars(googleConnection)
+        ? import("@/lib/google/calendar")
+            .then(({ listGoogleCalendars }) => listGoogleCalendars(googleConnection))
             .then((calendars) => ({ calendars, error: null as string | null }))
             .catch((error: unknown) => ({
               calendars: [],
-              error: error instanceof Error ? error.message : "Falha ao listar calendarios",
+              error: error instanceof Error ? error.message : "Falha ao listar calendários",
             }))
         : Promise.resolve({ calendars: [], error: null as string | null }),
     ]);
@@ -782,7 +904,7 @@ export async function getConfigData() {
       googleConnection,
       googleCalendars: calendarResult.calendars.map((calendar) => ({
         id: calendar.id ?? "",
-        summary: calendar.summary ?? calendar.id ?? "Calendario sem nome",
+        summary: calendar.summary ?? calendar.id ?? "Calendário sem nome",
         primary: Boolean(calendar.primary),
         accessRole: calendar.accessRole ?? "",
       })).filter((calendar) => calendar.id),
@@ -880,7 +1002,9 @@ function cleanImportFilter(value?: string) {
 export async function getImportReviewData(params: ImportReviewParams = {}) {
   const pageSize = 20;
   const selectedBatchId = cleanImportFilter(params.batchId);
-  const selectedStatus = cleanImportFilter(params.status);
+  const selectedStatus = params.status
+    ? cleanImportFilter(params.status) ?? "ALL"
+    : "OPEN";
   const selectedType = cleanImportFilter(params.type);
   const query = (params.q ?? "").trim().toLowerCase();
   const page = Math.max(Number(params.page ?? 1) || 1, 1);
@@ -908,7 +1032,8 @@ export async function getImportReviewData(params: ImportReviewParams = {}) {
 
     const filtered = records.filter((record) => {
       if (selectedBatchId && record.batchId !== selectedBatchId) return false;
-      if (selectedStatus && record.status !== selectedStatus) return false;
+      if (selectedStatus === "OPEN" && ["IMPORTED", "REJECTED"].includes(record.status)) return false;
+      if (selectedStatus && selectedStatus !== "ALL" && selectedStatus !== "OPEN" && record.status !== selectedStatus) return false;
       if (selectedType && record.detectedType !== selectedType) return false;
       if (!query) return true;
       return [
@@ -933,7 +1058,7 @@ export async function getImportReviewData(params: ImportReviewParams = {}) {
     return {
       filters: {
         batchId: selectedBatchId ?? "ALL",
-        status: selectedStatus ?? "ALL",
+        status: selectedStatus,
         type: selectedType ?? "ALL",
         q: params.q ?? "",
         page: safePage,
@@ -968,7 +1093,7 @@ export async function getImportReviewData(params: ImportReviewParams = {}) {
     return {
       filters: {
         batchId: "ALL",
-        status: "ALL",
+        status: "OPEN",
         type: "ALL",
         q: params.q ?? "",
         page: 1,
@@ -1043,6 +1168,7 @@ export async function getCurrentUserData(userId: string) {
 export async function getShellCountsData() {
   try {
     const now = new Date();
+    await refreshReservationLifecycleStatuses(now);
     const activeWhere = {
       status: { in: ["CONFIRMED", "IN_PROGRESS"] as Array<"CONFIRMED" | "IN_PROGRESS"> },
       endsAt: { gte: now },

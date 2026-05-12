@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  applyHistoricalReservation,
+  isClientCreditPeriod,
   parseDaycareSchedule,
   parseFinancialSummarySheet,
   parseHistoricalPeriod,
@@ -38,9 +40,84 @@ describe("parseHistoricalPeriod", () => {
     expect(result![1].getFullYear()).toBe(2026);
   });
 
+  it("parses ISO dates generated from Excel serial cells", () => {
+    const result = parseHistoricalPeriod("2025-08-17T00:00:00.000Z");
+    expect(result).not.toBeNull();
+    expect(result![0].getDate()).toBe(17);
+    expect(result![0].getMonth()).toBe(7);
+    expect(result![0].getHours()).toBe(10);
+    expect(result![1].getHours()).toBe(18);
+  });
+
+  it("parses ranges where the first year is implied", () => {
+    const sameYear = parseHistoricalPeriod("25/06 a 01/07/2026");
+    const previousYear = parseHistoricalPeriod("31/12 a 01/01/2026");
+    expect(sameYear).not.toBeNull();
+    expect(previousYear).not.toBeNull();
+    expect(sameYear![0].getFullYear()).toBe(2026);
+    expect(sameYear![1].getMonth()).toBe(6);
+    expect(previousYear![0].getFullYear()).toBe(2025);
+    expect(previousYear![1].getFullYear()).toBe(2026);
+  });
+
+  it("parses comma-separated visit dates as the first-to-last range", () => {
+    const result = parseHistoricalPeriod("31/12, 02/01, 04 e 06/01/2026");
+    expect(result).not.toBeNull();
+    expect(result![0].getDate()).toBe(31);
+    expect(result![0].getMonth()).toBe(11);
+    expect(result![0].getFullYear()).toBe(2025);
+    expect(result![1].getDate()).toBe(6);
+    expect(result![1].getMonth()).toBe(0);
+    expect(result![1].getFullYear()).toBe(2026);
+  });
+
   it("returns null for unparseable strings", () => {
     expect(parseHistoricalPeriod("")).toBeNull();
     expect(parseHistoricalPeriod("amanha")).toBeNull();
+    expect(parseHistoricalPeriod("32/01/2026")).toBeNull();
+  });
+});
+
+describe("historical reservation import edge cases", () => {
+  it("detects client credit notes", () => {
+    expect(isClientCreditPeriod("FICOU DE CRÉDITO")).toBe(true);
+    expect(isClientCreditPeriod("ficou de credito")).toBe(true);
+    expect(isClientCreditPeriod("15/05/2025")).toBe(false);
+  });
+
+  it("imports 'ficou de credito' as tutor credit without creating a reservation", async () => {
+    const db = {
+      tutorCreditTransaction: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: "credit-1" }),
+      },
+      importRecord: {
+        findUnique: vi.fn().mockResolvedValue({ createdAt: new Date(2026, 0, 5, 9, 0) }),
+      },
+      tutor: {
+        findMany: vi.fn().mockResolvedValue([{ id: "tutor-1", name: "Fabiana Gomes" }]),
+      },
+    };
+
+    const result = await applyHistoricalReservation(db as never, "record-1", {
+      period: "FICOU DE CRÉDITO",
+      tutorName: "Fabiana Gomes",
+      pets: "Kiara",
+      amountCents: 10000,
+      payment: "PIX",
+    });
+
+    expect(result).toEqual({ ok: true, targetModel: "TutorCreditTransaction", targetId: "credit-1" });
+    expect(db.tutorCreditTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tutorId: "tutor-1",
+        type: "CREDIT_ADDED",
+        description: "Sinal em credito - Fabiana Gomes / Kiara",
+        amountCents: 10000,
+        importRecordId: "record-1",
+      }),
+      select: { id: true },
+    });
   });
 });
 

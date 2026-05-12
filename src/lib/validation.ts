@@ -18,7 +18,7 @@ export const cents = z
   .transform((value, ctx) => {
     const parsed = parseCurrencyToCents(value);
     if (parsed == null) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "valor invalido" });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "valor inválido" });
       return z.NEVER;
     }
     return parsed;
@@ -31,7 +31,7 @@ export const optionalCents = z
     if (!value.trim()) return null;
     const parsed = parseCurrencyToCents(value);
     if (parsed == null) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "valor invalido" });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "valor inválido" });
       return z.NEVER;
     }
     return parsed;
@@ -94,6 +94,6 @@ export function parseFormData<T>(formData: FormData, schema: z.ZodSchema<T>): Pa
 
   const issue = result.error.issues[0];
   const path = issue?.path.join(".") || "campo";
-  const message = issue?.message || "invalido";
+  const message = issue?.message || "inválido";
   return { success: false, errorKey: `${path}:${message}` };
 }

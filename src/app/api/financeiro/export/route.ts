@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSessionUserId } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 
 function csvCell(value: unknown) {
@@ -7,6 +8,10 @@ function csvCell(value: unknown) {
 }
 
 export async function GET() {
+  if (!(await getSessionUserId())) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
   const entries = await getPrisma().financialEntry.findMany({
     orderBy: { entryDate: "desc" },
     include: { reservation: { include: { tutor: true, serviceType: true } } },

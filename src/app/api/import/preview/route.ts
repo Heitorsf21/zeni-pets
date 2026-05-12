@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
+import { getSessionUserId } from "@/lib/auth";
 import { parseProjectDiagnostics } from "@/lib/import/parsers";
 
 export async function GET() {
+  if (!(await getSessionUserId())) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
   const batches = await parseProjectDiagnostics(process.cwd());
   return NextResponse.json({
     batches: batches.map((batch) => ({

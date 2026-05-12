@@ -53,7 +53,7 @@ export function EditarPetModal({
           <input className="input" name="name" defaultValue={pet.name} required autoFocus />
         </label>
         <label className="field">
-          <span className="field__label">Especie</span>
+          <span className="field__label">Espécie</span>
           <select className="select" name="species" defaultValue={pet.species ?? "dog"}>
             <option value="dog">Cachorro</option>
             <option value="cat">Gato</option>
@@ -61,7 +61,7 @@ export function EditarPetModal({
           </select>
         </label>
         <label className="field">
-          <span className="field__label">Raca</span>
+          <span className="field__label">Raça</span>
           <input className="input" name="breed" defaultValue={pet.breed ?? ""} />
         </label>
         <label className="field">
@@ -73,15 +73,15 @@ export function EditarPetModal({
             <input type="checkbox" name="isNeutered" defaultChecked={Boolean(pet.isNeutered)} /> Castrado
           </label>
           <label className="check">
-            <input type="checkbox" name="isSociable" defaultChecked={Boolean(pet.isSociable)} /> Sociavel
+            <input type="checkbox" name="isSociable" defaultChecked={Boolean(pet.isSociable)} /> Sociável
           </label>
         </div>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Alimentacao</span>
+          <span className="field__label">Alimentação</span>
           <textarea className="textarea" name="foodNotes" defaultValue={pet.foodNotes ?? ""} />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Saude</span>
+          <span className="field__label">Saúde</span>
           <textarea className="textarea" name="healthNotes" defaultValue={pet.healthNotes ?? ""} />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
@@ -89,11 +89,11 @@ export function EditarPetModal({
           <textarea className="textarea" name="behaviorNotes" defaultValue={pet.behaviorNotes ?? ""} />
         </label>
         <label className="field">
-          <span className="field__label">Veterinario</span>
+          <span className="field__label">Veterinário</span>
           <input className="input" name="vetName" defaultValue={pet.vetName ?? ""} />
         </label>
         <label className="field">
-          <span className="field__label">Telefone veterinario</span>
+          <span className="field__label">Telefone veterinário</span>
           <input className="input" name="vetPhone" defaultValue={pet.vetPhone ?? ""} />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
@@ -107,7 +107,7 @@ export function EditarPetModal({
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
         <ConfirmForm
           action={deleteAction}
-          message={`Excluir o pet ${pet.name}? Essa acao nao pode ser desfeita.`}
+          message={`Excluir o pet ${pet.name}? Essa ação não pode ser desfeita.`}
         >
           <button
             className="btn btn--danger"

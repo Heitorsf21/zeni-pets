@@ -8,7 +8,7 @@ const STATUS_LABELS: Record<string, string> = {
   REQUESTED: "Solicitada",
   CONFIRMED: "Confirmada",
   IN_PROGRESS: "Em andamento",
-  COMPLETED: "Concluida",
+  COMPLETED: "Concluída",
   CANCELLED: "Cancelada",
 };
 
@@ -22,6 +22,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 type Option = { id: string; name: string };
 
 type Filters = {
+  scope: "upcoming" | "all";
   status: string[];
   paymentStatus: string[];
   serviceTypeId: string;
@@ -48,6 +49,9 @@ export function FiltrosReservasModal({
   tutors,
   activeCount,
 }: Props) {
+  const statusValue = filters.status.join(",");
+  const clearHref = filters.scope === "all" ? "/reservas?scope=all" : "/reservas";
+
   return (
     <Modal
       trigger={
@@ -62,6 +66,7 @@ export function FiltrosReservasModal({
       width={640}
     >
       <form className="form-grid" method="get" action="/reservas">
+        <input type="hidden" name="scope" value={filters.scope} />
         <label className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Buscar tutor ou pet</span>
           <div className="search">
@@ -76,9 +81,10 @@ export function FiltrosReservasModal({
         </label>
         <label className="field">
           <span className="field__label">Status</span>
-          <select className="select" name="status" defaultValue={filters.status[0] ?? ""}>
+          <select className="select" name="status" defaultValue={statusValue}>
             <option value="">Todos</option>
-            <option value="CONFIRMED,IN_PROGRESS">Ativas</option>
+            <option value="REQUESTED,CONFIRMED,IN_PROGRESS">Abertas</option>
+            <option value="CONFIRMED,IN_PROGRESS">Confirmadas e em andamento</option>
             {statusOptions.map((status) => (
               <option key={status} value={status}>{STATUS_LABELS[status]}</option>
             ))}
@@ -94,7 +100,7 @@ export function FiltrosReservasModal({
           </select>
         </label>
         <label className="field">
-          <span className="field__label">Servico</span>
+          <span className="field__label">Serviço</span>
           <select className="select" name="serviceTypeId" defaultValue={filters.serviceTypeId}>
             <option value="">Todos</option>
             {serviceTypes.map((service) => (
@@ -112,18 +118,18 @@ export function FiltrosReservasModal({
           </select>
         </label>
         <label className="field">
-          <span className="field__label">Inicio a partir de</span>
+          <span className="field__label">Início a partir de</span>
           <input className="input" name="from" type="date" defaultValue={filters.from} />
         </label>
         <label className="field">
-          <span className="field__label">Termino ate</span>
+          <span className="field__label">Término até</span>
           <input className="input" name="to" type="date" defaultValue={filters.to} />
         </label>
         <div
           className="row"
           style={{ gridColumn: "1 / -1", justifyContent: "space-between", marginTop: 4 }}
         >
-          <Link className="btn" href="/reservas">Limpar filtros</Link>
+          <Link className="btn" href={clearHref}>Limpar filtros</Link>
           <button className="btn btn--primary" type="submit">Aplicar</button>
         </div>
       </form>

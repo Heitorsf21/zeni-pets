@@ -32,11 +32,11 @@ export function NovoTutorModal() {
           <input className="input" name="birthDate" type="date" />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Endereco</span>
+          <span className="field__label">Endereço</span>
           <input className="input" name="address" />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Observacoes</span>
+          <span className="field__label">Observações</span>
           <textarea className="textarea" name="notes" />
         </label>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>

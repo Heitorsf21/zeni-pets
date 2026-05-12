@@ -18,7 +18,7 @@ export default async function LoginPage({
         </div>
 
         {params.error ? (
-          <div className="alert alert--danger">Usuario ou senha invalidos.</div>
+          <div className="alert alert--danger">Usuário ou senha inválidos.</div>
         ) : null}
 
         <label className="field">

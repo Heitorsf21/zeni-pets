@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
+import { slugifyServiceName } from "@/lib/service-types";
 import {
   centsField,
   centsFieldStrict,
@@ -35,12 +37,21 @@ function asMethod(value: string): PaymentMethod {
 }
 
 export async function createServiceTypeAction(formData: FormData) {
+  await requireUser();
   const name = stringField(formData, "name");
   if (!name) redirect("/configuracoes/servicos?error=nome-obrigatorio");
+  const slug = slugifyServiceName(name);
+
+  const existing = await getPrisma().serviceType.findFirst({
+    where: { OR: [{ slug }, { name: { equals: name, mode: "insensitive" } }] },
+    select: { id: true },
+  });
+  if (existing) redirect("/configuracoes/servicos?error=servico-duplicado");
 
   await getPrisma().serviceType.create({
     data: {
       name,
+      slug,
       kind: asKind(stringField(formData, "kind")),
       description: optionalStringField(formData, "description"),
       isActive: formData.get("isActive") !== "off",
@@ -52,13 +63,25 @@ export async function createServiceTypeAction(formData: FormData) {
 }
 
 export async function updateServiceTypeAction(id: string, formData: FormData) {
+  await requireUser();
   const name = stringField(formData, "name");
   if (!name) redirect("/configuracoes/servicos?error=nome-obrigatorio");
+  const slug = slugifyServiceName(name);
+
+  const existing = await getPrisma().serviceType.findFirst({
+    where: {
+      id: { not: id },
+      OR: [{ slug }, { name: { equals: name, mode: "insensitive" } }],
+    },
+    select: { id: true },
+  });
+  if (existing) redirect("/configuracoes/servicos?error=servico-duplicado");
 
   await getPrisma().serviceType.update({
     where: { id },
     data: {
       name,
+      slug,
       kind: asKind(stringField(formData, "kind")),
       description: optionalStringField(formData, "description"),
       isActive: formData.get("isActive") !== "off",
@@ -70,6 +93,7 @@ export async function updateServiceTypeAction(id: string, formData: FormData) {
 }
 
 export async function deleteServiceTypeAction(id: string) {
+  await requireUser();
   const usage = await getPrisma().reservation.count({ where: { serviceTypeId: id } });
   if (usage > 0) redirect("/configuracoes/servicos?error=servico-em-uso");
 
@@ -79,6 +103,7 @@ export async function deleteServiceTypeAction(id: string) {
 }
 
 export async function createPriceRuleAction(formData: FormData) {
+  await requireUser();
   const serviceTypeId = stringField(formData, "serviceTypeId");
   const label = stringField(formData, "label");
   const firstPet = centsFieldStrict(formData, "firstPetCents");
@@ -107,6 +132,7 @@ export async function createPriceRuleAction(formData: FormData) {
 }
 
 export async function updatePriceRuleAction(id: string, formData: FormData) {
+  await requireUser();
   const label = stringField(formData, "label");
   const firstPet = centsFieldStrict(formData, "firstPetCents");
   if (!label || firstPet == null) {
@@ -134,6 +160,7 @@ export async function updatePriceRuleAction(id: string, formData: FormData) {
 }
 
 export async function deletePriceRuleAction(id: string) {
+  await requireUser();
   await getPrisma().servicePriceRule.delete({ where: { id } });
   revalidatePath("/configuracoes/servicos");
   redirect("/configuracoes/servicos?deleted=1");

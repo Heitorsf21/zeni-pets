@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
-import { optionalStringField, stringField } from "@/lib/forms";
+import { centsFieldStrict, optionalStringField, stringField } from "@/lib/forms";
+import { getTutorCreditBalance } from "@/lib/credits";
 
 function parseBirthDate(value: FormDataEntryValue | null): Date | null {
   const text = typeof value === "string" ? value.trim() : "";
@@ -13,6 +15,7 @@ function parseBirthDate(value: FormDataEntryValue | null): Date | null {
 }
 
 export async function createTutorAction(formData: FormData) {
+  await requireUser();
   const name = stringField(formData, "name");
   if (!name) redirect("/tutores?error=nome-obrigatorio");
 
@@ -34,6 +37,7 @@ export async function createTutorAction(formData: FormData) {
 }
 
 export async function updateTutorAction(id: string, formData: FormData) {
+  await requireUser();
   const name = stringField(formData, "name");
   if (!name) redirect(`/tutores/${id}/ficha?error=nome-obrigatorio`);
 
@@ -58,6 +62,7 @@ export async function updateTutorAction(id: string, formData: FormData) {
 }
 
 export async function toggleTutorStatusAction(id: string, status: "ACTIVE" | "INACTIVE") {
+  await requireUser();
   await getPrisma().tutor.update({
     where: { id },
     data: { status: status === "ACTIVE" ? "INACTIVE" : "ACTIVE" },
@@ -68,7 +73,45 @@ export async function toggleTutorStatusAction(id: string, status: "ACTIVE" | "IN
   revalidatePath(`/tutores/${id}/ficha`);
 }
 
+export async function adjustTutorCreditAction(id: string, formData: FormData) {
+  await requireUser();
+  const amountCents = centsFieldStrict(formData, "amountCents");
+  const operation = stringField(formData, "operation") === "REMOVE" ? "REMOVE" : "ADD";
+  const description = optionalStringField(formData, "description")
+    ?? (operation === "ADD" ? "Crédito adicionado manualmente" : "Ajuste manual de crédito");
+
+  if (amountCents == null || amountCents <= 0) {
+    redirect(`/tutores/${id}/ficha?error=valor-invalido`);
+  }
+
+  const prisma = getPrisma();
+  const tutor = await prisma.tutor.findUnique({ where: { id }, select: { id: true } });
+  if (!tutor) redirect("/tutores?error=tutor-nao-encontrado");
+
+  const balance = await getTutorCreditBalance(prisma, id);
+  if (operation === "REMOVE" && amountCents > balance) {
+    redirect(`/tutores/${id}/ficha?error=credito-insuficiente`);
+  }
+
+  await prisma.tutorCreditTransaction.create({
+    data: {
+      tutorId: id,
+      type: operation === "ADD" ? "CREDIT_ADDED" : "ADJUSTMENT",
+      amountCents: operation === "ADD" ? amountCents : -amountCents,
+      description,
+      entryDate: new Date(),
+    },
+  });
+
+  revalidatePath("/tutores");
+  revalidatePath(`/tutores/${id}`);
+  revalidatePath(`/tutores/${id}/ficha`);
+  revalidatePath("/financeiro");
+  redirect(`/tutores/${id}/ficha?saved=credit`);
+}
+
 export async function deleteTutorAction(id: string) {
+  await requireUser();
   const reservationCount = await getPrisma().reservation.count({ where: { tutorId: id } });
   if (reservationCount > 0) {
     redirect(`/tutores/${id}/ficha?error=tutor-com-reservas`);

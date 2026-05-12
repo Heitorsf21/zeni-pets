@@ -13,7 +13,7 @@ export function AgendaMonthPicker({ defaultValue }: Props) {
       className="input input--month"
       type="month"
       defaultValue={defaultValue}
-      aria-label="Ir para mes"
+      aria-label="Ir para mês"
       onChange={(event) => {
         const value = event.currentTarget.value;
         if (value) router.push(`/agenda?month=${value}`);

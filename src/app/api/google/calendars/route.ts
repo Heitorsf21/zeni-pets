@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
+import { getSessionUserId } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { listGoogleCalendars } from "@/lib/google/calendar";
 
 export async function GET() {
+  if (!(await getSessionUserId())) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
   const connection = await getPrisma().googleCalendarConnection.findFirst({
     orderBy: { connectedAt: "desc" },
   });
@@ -27,7 +32,7 @@ export async function GET() {
       {
         calendars: [],
         connected: true,
-        error: error instanceof Error ? error.message : "Falha ao listar calendarios",
+        error: error instanceof Error ? error.message : "Falha ao listar calendários",
       },
       { status: 502 },
     );

@@ -20,6 +20,8 @@ import { ConfirmForm } from "@/components/ui/confirm-form";
 import { Tabs } from "@/components/ui/tabs";
 import { getPetDetailData, getPetTasksData, getReservationFormData } from "@/lib/app-data";
 import { formatDateShort, formatDateTimeShort } from "@/lib/date";
+import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
+import { calculateChargeableStayUnits } from "@/lib/rules";
 import { deletePetAction, updatePetAction } from "../actions";
 import { deleteTaskAction, toggleTaskOccurrenceAction } from "@/app/(app)/dashboard/actions";
 import { NovaTarefaModal } from "@/app/(app)/dashboard/nova-tarefa-modal";
@@ -28,11 +30,6 @@ import { EditarPetModal } from "./editar-pet-modal";
 
 const VALID_TABS = ["ficha", "saude", "alimentacao", "comportamento", "historico"] as const;
 type PetTab = (typeof VALID_TABS)[number];
-
-function nightsBetween(start: Date, end: Date) {
-  const diff = end.getTime() - start.getTime();
-  return Math.max(Math.ceil(diff / 86_400_000), 0);
-}
 
 function longDate(date?: Date | null) {
   if (!date) return "-";
@@ -68,17 +65,17 @@ export default async function PetDetailPage({
     ["CONFIRMED", "IN_PROGRESS"].includes(reservation.status),
   );
   const totalNights = reservations.reduce(
-    (sum, reservation) => sum + nightsBetween(reservation.startsAt, reservation.endsAt),
+    (sum, reservation) => sum + calculateChargeableStayUnits(reservation.startsAt, reservation.endsAt),
     0,
   );
 
   const tabHref = (id: string) => `/pets/${pet.id}${id === "ficha" ? "" : `?tab=${id}`}`;
   const tabItems = [
     { id: "ficha", label: "Ficha", href: tabHref("ficha") },
-    { id: "saude", label: "Saude", href: tabHref("saude") },
-    { id: "alimentacao", label: "Alimentacao", href: tabHref("alimentacao") },
+    { id: "saude", label: "Saúde", href: tabHref("saude") },
+    { id: "alimentacao", label: "Alimentação", href: tabHref("alimentacao") },
     { id: "comportamento", label: "Comportamento", href: tabHref("comportamento") },
-    { id: "historico", label: "Historico", href: tabHref("historico") },
+    { id: "historico", label: "Histórico", href: tabHref("historico") },
   ];
 
   const editPetModal = (
@@ -113,7 +110,7 @@ export default async function PetDetailPage({
             {pet.name}
           </>
         }
-        subtitle={`${pet.breed || "Raca pendente"} - ${pet.ageLabel || "idade pendente"} - Tutor: ${pet.tutor.name}`}
+        subtitle={`${pet.breed || "Raça pendente"} - ${pet.ageLabel || "idade pendente"} - Tutor: ${pet.tutor.name}`}
         actions={
           <>
             <Link className="btn" href="/pets"><ArrowLeft /> Voltar</Link>
@@ -121,7 +118,9 @@ export default async function PetDetailPage({
             <NovaReservaModal
               tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-              serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+              serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+              seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+              depositPercent={formData.settings?.depositPercent ?? 50}
               defaultTutorId={pet.tutor.id}
               defaultPetId={pet.id}
             />
@@ -147,11 +146,11 @@ export default async function PetDetailPage({
                     )}
                   </div>
                   <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                    {pet.breed || "Raca pendente"} - {pet.ageLabel || "idade pendente"}
+                    {pet.breed || "Raça pendente"} - {pet.ageLabel || "idade pendente"}
                   </div>
                   <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                    <span className="badge badge--ativo">{pet.isNeutered ? "Castrado" : "Nao castrado"}</span>
-                    <span className="badge badge--ativo">{pet.isSociable ? "Sociavel" : "Reservado"}</span>
+                    <span className="badge badge--ativo">{pet.isNeutered ? "Castrado" : "Não castrado"}</span>
+                    <span className="badge badge--ativo">{pet.isSociable ? "Sociável" : "Reservado"}</span>
                     <span className="badge">{pet.species === "cat" ? "Gato" : pet.species === "other" ? "Outro" : "Cachorro"}</span>
                   </div>
                 </div>
@@ -179,9 +178,9 @@ export default async function PetDetailPage({
                       <thead>
                         <tr>
                           <th>Tarefa</th>
-                          <th>Periodo</th>
-                          <th>Proximas</th>
-                          <th aria-label="Acoes" />
+                          <th>Período</th>
+                          <th>Próximas</th>
+                          <th aria-label="Ações" />
                         </tr>
                       </thead>
                       <tbody>
@@ -193,7 +192,7 @@ export default async function PetDetailPage({
                             </td>
                             <td className="mono" style={{ fontSize: 12 }}>
                               {formatDateShort(task.taskDate)}
-                              {task.endsAt ? ` ate ${formatDateShort(task.endsAt)}` : ""}
+                              {task.endsAt ? ` até ${formatDateShort(task.endsAt)}` : ""}
                             </td>
                             <td>
                               {task.occurrences.length ? (
@@ -211,7 +210,7 @@ export default async function PetDetailPage({
                                   ))}
                                 </div>
                               ) : (
-                                <span className="muted" style={{ fontSize: 12 }}>nenhuma proxima</span>
+                                <span className="muted" style={{ fontSize: 12 }}>nenhuma próxima</span>
                               )}
                             </td>
                             <td>
@@ -249,12 +248,12 @@ export default async function PetDetailPage({
             {tab === "alimentacao" ? (
               <section className="card">
                 <div className="card__header">
-                  <div className="card__title"><Soup /> Alimentacao</div>
+                  <div className="card__title"><Soup /> Alimentação</div>
                 </div>
                 <div className="card__body">
                   <dl className="kv" style={{ gridTemplateColumns: "110px 1fr" }}>
                     <dt>Rotina</dt><dd>{pet.foodNotes || "Sem rotina cadastrada."}</dd>
-                    <dt>Restricoes</dt><dd className="muted">Registrar no campo de observacoes da ficha.</dd>
+                    <dt>Restrições</dt><dd className="muted">Registrar no campo de observações da ficha.</dd>
                     <dt>Petiscos</dt><dd className="muted">Conferir com o tutor antes de liberar.</dd>
                   </dl>
                 </div>
@@ -264,12 +263,12 @@ export default async function PetDetailPage({
             {tab === "saude" ? (
               <section className="card">
                 <div className="card__header">
-                  <div className="card__title"><HeartPulse /> Saude</div>
+                  <div className="card__title"><HeartPulse /> Saúde</div>
                 </div>
                 <div className="card__body">
                   <dl className="kv" style={{ gridTemplateColumns: "110px 1fr" }}>
-                    <dt>Saude geral</dt><dd>{pet.healthNotes || "Sem observacoes de saude."}</dd>
-                    <dt>Veterinario</dt><dd>{pet.vetName || "Nao informado"}</dd>
+                    <dt>Saúde geral</dt><dd>{pet.healthNotes || "Sem observações de saúde."}</dd>
+                    <dt>Veterinário</dt><dd>{pet.vetName || "Não informado"}</dd>
                     <dt>Contato vet</dt><dd className="mono">{pet.vetPhone || "-"}</dd>
                   </dl>
                 </div>
@@ -279,10 +278,10 @@ export default async function PetDetailPage({
             {tab === "comportamento" ? (
               <section className="card">
                 <div className="card__header">
-                  <div className="card__title"><Stethoscope /> Comportamento e observacoes</div>
+                  <div className="card__title"><Stethoscope /> Comportamento e observações</div>
                 </div>
                 <div className="card__body" style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.55 }}>
-                  {pet.behaviorNotes || "Sem observacoes comportamentais cadastradas."}
+                  {pet.behaviorNotes || "Sem observações comportamentais cadastradas."}
                 </div>
               </section>
             ) : null}
@@ -312,7 +311,7 @@ export default async function PetDetailPage({
                             {formatDateTimeShort(reservation.startsAt)} - {formatDateTimeShort(reservation.endsAt)}
                           </td>
                           <td><Link href={`/reservas/${reservation.id}`}>{reservation.serviceType.name}</Link></td>
-                          <td className="mono">{nightsBetween(reservation.startsAt, reservation.endsAt)}</td>
+                          <td className="mono">{calculateChargeableStayUnits(reservation.startsAt, reservation.endsAt)}</td>
                           <td><StatusBadge status={reservation.status} /></td>
                         </tr>
                       )) : (
@@ -347,7 +346,7 @@ export default async function PetDetailPage({
                   <dt>Telefone</dt><dd className="mono">{pet.tutor.phone || "-"}</dd>
                   <dt>E-mail</dt><dd>{pet.tutor.email || "-"}</dd>
                   <dt>Documento</dt><dd className="mono">{pet.tutor.document || "-"}</dd>
-                  <dt>Endereco</dt><dd>{pet.tutor.address || "-"}</dd>
+                  <dt>Endereço</dt><dd>{pet.tutor.address || "-"}</dd>
                 </dl>
                 <Link className="btn" href={`/tutores/${pet.tutor.id}/ficha`} style={{ marginTop: 14, width: "100%" }}>
                   Ver ficha do tutor
@@ -357,27 +356,27 @@ export default async function PetDetailPage({
 
             <section className="card">
               <div className="card__header">
-                <div className="card__title"><AlertCircle /> Atencao</div>
+                <div className="card__title"><AlertCircle /> Atenção</div>
               </div>
               <div className="card__body" style={{ fontSize: 12, color: "var(--text-muted)" }}>
                 <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-                  <li>{pet.healthNotes ? "Conferir observacoes de saude" : "Saude sem alertas cadastrados"}</li>
+                  <li>{pet.healthNotes ? "Conferir observações de saúde" : "Saúde sem alertas cadastrados"}</li>
                   <li>{pet.behaviorNotes ? "Ler comportamento antes do manejo" : "Comportamento sem alertas cadastrados"}</li>
-                  <li>{pet.deliveredItems ? "Conferir itens na entrada e saida" : "Nenhum item entregue registrado"}</li>
+                  <li>{pet.deliveredItems ? "Conferir itens na entrada e saída" : "Nenhum item entregue registrado"}</li>
                 </ul>
               </div>
             </section>
 
             <section className="card">
               <div className="card__header">
-                <div className="card__title">Estatisticas</div>
+                <div className="card__title">Estatísticas</div>
               </div>
               <div className="card__body">
                 <dl className="kv">
                   <dt>Total estadias</dt><dd className="mono">{reservations.length}</dd>
                   <dt>Total noites</dt><dd className="mono">{totalNights}</dd>
                   <dt>Cadastro</dt><dd>{longDate(pet.createdAt)}</dd>
-                  <dt>Ultima reserva</dt><dd>{reservations[0] ? formatDateShort(reservations[0].startsAt) : "-"}</dd>
+                  <dt>Última reserva</dt><dd>{reservations[0] ? formatDateShort(reservations[0].startsAt) : "-"}</dd>
                 </dl>
               </div>
             </section>
@@ -390,7 +389,9 @@ export default async function PetDetailPage({
                 <NovaReservaModal
                   tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
                   pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-                  serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+                  serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+                  seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+                  depositPercent={formData.settings?.depositPercent ?? 50}
                   defaultTutorId={pet.tutor.id}
                   defaultPetId={pet.id}
                   triggerVariant="default"

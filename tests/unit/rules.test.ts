@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateChargeableStayUnits,
   calculateDepositPlan,
   calculateLateFeeCents,
   calculateReservationTotals,
@@ -8,6 +9,22 @@ import {
 } from "@/lib/rules";
 
 describe("reservation calculation rules", () => {
+  it("calculates chargeable stay units from the reservation period", () => {
+    expect(
+      calculateChargeableStayUnits(
+        new Date("2026-06-09T10:00:00-03:00"),
+        new Date("2026-06-14T10:00:00-03:00"),
+      ),
+    ).toBe(5);
+
+    expect(
+      calculateChargeableStayUnits(
+        new Date("2026-06-09T10:00:00-03:00"),
+        new Date("2026-06-09T18:00:00-03:00"),
+      ),
+    ).toBe(1);
+  });
+
   it("suggests 50% deposit and balance by default", () => {
     expect(calculateDepositPlan(48_000)).toEqual({
       depositSuggestedCents: 24_000,

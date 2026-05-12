@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { optionalStringField, stringField } from "@/lib/forms";
 import { parseDatetimeLocal } from "@/lib/date";
@@ -17,6 +18,7 @@ function parseDateOrNull(value: FormDataEntryValue | null) {
 }
 
 export async function createSeasonAction(formData: FormData) {
+  await requireUser();
   const name = stringField(formData, "name");
   const startsAt = parseDateOrNull(formData.get("startsAt"));
   const endsAt = parseDateOrNull(formData.get("endsAt"));
@@ -40,6 +42,7 @@ export async function createSeasonAction(formData: FormData) {
 }
 
 export async function updateSeasonAction(id: string, formData: FormData) {
+  await requireUser();
   const name = stringField(formData, "name");
   const startsAt = parseDateOrNull(formData.get("startsAt"));
   const endsAt = parseDateOrNull(formData.get("endsAt"));
@@ -64,6 +67,7 @@ export async function updateSeasonAction(id: string, formData: FormData) {
 }
 
 export async function deleteSeasonAction(id: string) {
+  await requireUser();
   await getPrisma().seasonPeriod.delete({ where: { id } });
   revalidatePath("/configuracoes/temporadas");
   redirect("/configuracoes/temporadas?deleted=1");

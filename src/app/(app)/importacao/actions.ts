@@ -17,6 +17,9 @@ import { APPLIERS } from "@/lib/import/applier";
 
 type ReviewRecordStatus = "APPROVED" | "REJECTED" | "NEEDS_REVIEW" | "PENDING_REVIEW";
 type ReviewResolutionAction = "APPROVE" | "REJECT" | "MERGE_TUTOR" | "MERGE_PET" | "CORRECT_FIELD" | "IGNORE";
+type ImportAttemptResult =
+  | { ok: true; targetModel: string; targetId: string; alreadyImported?: boolean; financeMonth?: string | null }
+  | { ok: false; reason: string };
 
 function redirectWithError(message: string): never {
   redirect(`/importacao?error=${encodeURIComponent(message)}`);
@@ -32,8 +35,135 @@ function parseJsonField(formData: FormData, key: string) {
   try {
     return JSON.parse(raw) as Prisma.InputJsonValue;
   } catch {
-    redirectWithError("JSON normalizado invalido");
+    redirectWithError("JSON normalizado inválido");
   }
+}
+
+function isPayloadObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function financeMonthFromPayload(detectedType: string, payload: Record<string, unknown>) {
+  if (detectedType !== "FINANCIAL_ENTRY") return null;
+  const date = new Date(String(payload.date ?? ""));
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function revalidateImportTargets() {
+  revalidatePath("/importacao");
+  revalidatePath("/dashboard");
+  revalidatePath("/tutores");
+  revalidatePath("/pets");
+  revalidatePath("/reservas");
+  revalidatePath("/financeiro");
+  revalidatePath("/configuracoes/servicos");
+}
+
+async function importRecordTransaction(id: string): Promise<ImportAttemptResult> {
+  return getPrisma().$transaction(async (tx) => {
+    const record = await tx.importRecord.findUnique({ where: { id } });
+    if (!record) return { ok: false, reason: "registro-nao-encontrado" };
+
+    if (record.status === "IMPORTED") {
+      const importedResolution = await tx.importResolution.findFirst({
+        where: { sourceRecordId: id, action: "IMPORT_RECORD" },
+        orderBy: { createdAt: "desc" },
+        select: { targetModel: true, targetId: true },
+      });
+      return {
+        ok: true,
+        alreadyImported: true,
+        targetModel: importedResolution?.targetModel ?? "ImportRecord",
+        targetId: importedResolution?.targetId ?? id,
+      };
+    }
+
+    if (!isPayloadObject(record.normalizedPayload)) {
+      const reason = record.normalizedPayload ? "payload-invalido" : "sem-payload";
+      await tx.importRecord.update({
+        where: { id },
+        data: {
+          status: "NEEDS_REVIEW",
+          reviewNotes: `Falha ao importar: ${reason}`,
+        },
+      });
+      await tx.importResolution.create({
+        data: {
+          batchId: record.batchId,
+          sourceRecordId: id,
+          action: "IMPORT_RECORD",
+          notes: `Falha ao importar: ${reason}`,
+        },
+      });
+      return { ok: false, reason };
+    }
+
+    const applier = APPLIERS[record.detectedType as keyof typeof APPLIERS];
+    if (!applier) {
+      const reason = "tipo-nao-suportado";
+      await tx.importRecord.update({
+        where: { id },
+        data: {
+          status: "NEEDS_REVIEW",
+          reviewNotes: `Falha ao importar: ${reason}`,
+        },
+      });
+      await tx.importResolution.create({
+        data: {
+          batchId: record.batchId,
+          sourceRecordId: id,
+          action: "IMPORT_RECORD",
+          notes: `Falha ao importar: ${reason}`,
+        },
+      });
+      return { ok: false, reason };
+    }
+
+    const result = await applier(tx, id, record.normalizedPayload);
+    if (!result.ok) {
+      await tx.importRecord.update({
+        where: { id },
+        data: {
+          status: "NEEDS_REVIEW",
+          reviewNotes: `Falha ao importar: ${result.reason}`,
+        },
+      });
+      await tx.importResolution.create({
+        data: {
+          batchId: record.batchId,
+          sourceRecordId: id,
+          action: "IMPORT_RECORD",
+          notes: `Falha ao importar: ${result.reason}`,
+        },
+      });
+      return { ok: false, reason: result.reason };
+    }
+
+    await tx.importRecord.update({
+      where: { id },
+      data: {
+        status: "IMPORTED",
+        reviewNotes: `Importado como ${result.targetModel} ${result.targetId}`,
+      },
+    });
+    await tx.importResolution.create({
+      data: {
+        batchId: record.batchId,
+        sourceRecordId: id,
+        action: "IMPORT_RECORD",
+        targetModel: result.targetModel,
+        targetId: result.targetId,
+      },
+    });
+
+    return {
+      ok: true,
+      targetModel: result.targetModel,
+      targetId: result.targetId,
+      financeMonth: financeMonthFromPayload(record.detectedType, record.normalizedPayload),
+    };
+  });
 }
 
 async function createResolution(input: {
@@ -46,7 +176,7 @@ async function createResolution(input: {
     where: { id: input.recordId },
     select: { batchId: true },
   });
-  if (!record) redirectWithError("Registro de importacao nao encontrado");
+  if (!record) redirectWithError("Registro de importação não encontrado");
 
   await getPrisma().importResolution.create({
     data: {
@@ -64,6 +194,7 @@ export async function updateImportRecordStatusAction(
   status: ReviewRecordStatus,
   formData?: FormData,
 ) {
+  await requireUser();
   const notes = formData ? optionalStringField(formData, "reviewNotes") : null;
   await getPrisma().importRecord.update({
     where: { id },
@@ -86,11 +217,13 @@ export async function updateImportBatchStatusAction(
   id: string,
   status: "PENDING_REVIEW" | "REVIEWING" | "APPROVED" | "REJECTED",
 ) {
+  await requireUser();
   await getPrisma().importBatch.update({ where: { id }, data: { status } });
   revalidatePath("/importacao");
 }
 
 export async function updateImportRecordPayloadAction(id: string, formData: FormData) {
+  await requireUser();
   const normalizedPayload = parseJsonField(formData, "normalizedPayload");
   const notes = optionalStringField(formData, "reviewNotes");
   const nextStatus = String(formData.get("nextStatus") ?? "APPROVED") as ReviewRecordStatus;
@@ -119,6 +252,7 @@ export async function createMergeResolutionAction(
   action: "MERGE_TUTOR" | "MERGE_PET",
   formData: FormData,
 ) {
+  await requireUser();
   const canonicalName = optionalStringField(formData, "canonicalName");
   const aliases = optionalStringField(formData, "aliases");
   const notes = optionalStringField(formData, "reviewNotes");
@@ -153,116 +287,40 @@ export async function createMergeResolutionAction(
 }
 
 export async function importApprovedRecordAction(id: string) {
-  const record = await getPrisma().importRecord.findUnique({ where: { id } });
-  if (!record) redirect("/importacao?error=registro-nao-encontrado");
-  if (record.status === "IMPORTED") redirect("/importacao?error=ja-importado");
-  if (!record.normalizedPayload) redirect("/importacao?error=sem-payload");
-
-  const applier = APPLIERS[record.detectedType as keyof typeof APPLIERS];
-  if (!applier) redirect(`/importacao?error=${encodeURIComponent("tipo-nao-suportado")}`);
-
-  if (typeof record.normalizedPayload !== "object" || Array.isArray(record.normalizedPayload)) {
-    redirect("/importacao?error=payload-invalido");
-  }
-
-  const result = await applier(getPrisma(), id, record.normalizedPayload as Record<string, unknown>);
+  await requireUser();
+  const result = await importRecordTransaction(id);
   if (!result.ok) {
-    await getPrisma().importRecord.update({
-      where: { id },
-      data: {
-        status: "NEEDS_REVIEW",
-        reviewNotes: `Falha ao importar: ${result.reason}`,
-      },
-    });
-    await getPrisma().importResolution.create({
-      data: {
-        batchId: record.batchId,
-        sourceRecordId: id,
-        action: "IMPORT_RECORD",
-        notes: `Falha ao importar: ${result.reason}`,
-      },
-    });
-    revalidatePath("/importacao");
+    revalidateImportTargets();
     redirect(`/importacao?error=${encodeURIComponent(result.reason)}`);
   }
 
-  await getPrisma().importRecord.update({
-    where: { id },
-    data: {
-      status: "IMPORTED",
-      reviewNotes: `Importado como ${result.targetModel} ${result.targetId}`,
-    },
-  });
-  await getPrisma().importResolution.create({
-    data: {
-      batchId: record.batchId,
-      sourceRecordId: id,
-      action: "IMPORT_RECORD",
-      targetModel: result.targetModel,
-      targetId: result.targetId,
-    },
-  });
-
-  revalidatePath("/importacao");
-  revalidatePath("/tutores");
-  revalidatePath("/pets");
-  revalidatePath("/reservas");
-  revalidatePath("/financeiro");
-  revalidatePath("/configuracoes/servicos");
-  redirect("/importacao?saved=1");
+  revalidateImportTargets();
+  if (result.targetModel === "FinancialEntry") {
+    const month = result.financeMonth ? `&month=${result.financeMonth}` : "";
+    redirect(`/financeiro?saved=1${month}`);
+  }
+  redirect(result.alreadyImported ? "/importacao?saved=1&alreadyImported=1" : "/importacao?saved=1&imported=1");
 }
 
 export async function importApprovedBatchAction(batchId: string) {
+  await requireUser();
   const records = await getPrisma().importRecord.findMany({
     where: { batchId, status: "APPROVED" },
-    select: { id: true, detectedType: true, normalizedPayload: true },
+    select: { id: true },
   });
 
   let imported = 0;
   let failed = 0;
   for (const record of records) {
-    if (!record.normalizedPayload) continue;
-    if (typeof record.normalizedPayload !== "object" || Array.isArray(record.normalizedPayload)) continue;
-    const applier = APPLIERS[record.detectedType as keyof typeof APPLIERS];
-    if (!applier) continue;
-
-    const result = await applier(getPrisma(), record.id, record.normalizedPayload as Record<string, unknown>);
+    const result = await importRecordTransaction(record.id);
     if (result.ok) {
-      await getPrisma().importRecord.update({
-        where: { id: record.id },
-        data: {
-          status: "IMPORTED",
-          reviewNotes: `Importado como ${result.targetModel} ${result.targetId}`,
-        },
-      });
-      await getPrisma().importResolution.create({
-        data: {
-          batchId,
-          sourceRecordId: record.id,
-          action: "IMPORT_RECORD",
-          targetModel: result.targetModel,
-          targetId: result.targetId,
-        },
-      });
-      imported++;
+      if (!result.alreadyImported) imported++;
     } else {
-      await getPrisma().importRecord.update({
-        where: { id: record.id },
-        data: {
-          status: "NEEDS_REVIEW",
-          reviewNotes: `Falha ao importar: ${result.reason}`,
-        },
-      });
       failed++;
     }
   }
 
-  revalidatePath("/importacao");
-  revalidatePath("/tutores");
-  revalidatePath("/pets");
-  revalidatePath("/reservas");
-  revalidatePath("/financeiro");
-  revalidatePath("/configuracoes/servicos");
+  revalidateImportTargets();
   redirect(`/importacao?saved=1&imported=${imported}&failed=${failed}`);
 }
 

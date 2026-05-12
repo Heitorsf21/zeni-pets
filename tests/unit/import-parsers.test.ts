@@ -22,6 +22,22 @@ describe("diagnostic import staging parsers", () => {
       batch.records.some(
         (record) =>
           record.detectedType === "FINANCIAL_ENTRY" &&
+          record.normalizedPayload?.category === "Hospedagem Thor" &&
+          record.normalizedPayload?.kind === "INCOME",
+      ),
+    ).toBe(true);
+    expect(
+      batch.records.some(
+        (record) =>
+          record.detectedType === "FINANCIAL_ENTRY" &&
+          record.normalizedPayload?.category === "Instagram" &&
+          record.normalizedPayload?.kind === "EXPENSE",
+      ),
+    ).toBe(true);
+    expect(
+      batch.records.some(
+        (record) =>
+          record.detectedType === "FINANCIAL_ENTRY" &&
           String(record.rawPayload.Categoria ?? "").startsWith("Total"),
       ),
     ).toBe(false);

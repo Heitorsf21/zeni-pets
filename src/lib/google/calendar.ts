@@ -1,6 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import type { calendar_v3 } from "googleapis";
 import { google } from "googleapis";
 import { decryptText, encryptText } from "@/lib/crypto";
+import { assertGoogleOAuthEnv } from "@/lib/google/env";
+
+export { getGoogleEnvStatus } from "@/lib/google/env";
 
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
@@ -34,33 +38,13 @@ function getOAuthClient() {
   );
 }
 
-export function getGoogleEnvStatus() {
-  return {
-    clientId: Boolean(process.env.GOOGLE_CLIENT_ID),
-    clientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
-    redirectUri: Boolean(process.env.GOOGLE_REDIRECT_URI),
-    webhookUrl: Boolean(process.env.GOOGLE_WEBHOOK_URL),
-  };
-}
-
-export function assertGoogleOAuthEnv() {
-  const status = getGoogleEnvStatus();
-  const missing = [
-    status.clientId ? null : "GOOGLE_CLIENT_ID",
-    status.clientSecret ? null : "GOOGLE_CLIENT_SECRET",
-    status.redirectUri ? null : "GOOGLE_REDIRECT_URI",
-  ].filter(Boolean);
-  if (missing.length) {
-    throw new Error(`Configure ${missing.join(", ")} para conectar o Google Agenda.`);
-  }
-}
-
-export function getGoogleAuthUrl() {
+export function getGoogleAuthUrl(state?: string) {
   assertGoogleOAuthEnv();
   return getOAuthClient().generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: GOOGLE_SCOPES,
+    state,
   });
 }
 
@@ -202,15 +186,63 @@ export async function createCalendarWatch(input: {
     version: "v3",
     auth: clientFromStoredTokens(input.tokens),
   });
+  const channelToken = randomBytes(32).toString("base64url");
   const response = await calendar.events.watch({
     calendarId: input.calendarId,
     requestBody: {
       id: randomUUID(),
       type: "web_hook",
       address: process.env.GOOGLE_WEBHOOK_URL,
+      token: channelToken,
     },
   });
-  return response.data;
+  return { ...response.data, channelToken };
+}
+
+export async function stopCalendarWatch(input: {
+  tokens: { accessTokenCipher?: string | null; refreshTokenCipher?: string | null };
+  channelId?: string | null;
+  resourceId?: string | null;
+}) {
+  if (!input.channelId || !input.resourceId) return;
+  const calendar = google.calendar({
+    version: "v3",
+    auth: clientFromStoredTokens(input.tokens),
+  });
+  await calendar.channels.stop({
+    requestBody: {
+      id: input.channelId,
+      resourceId: input.resourceId,
+    },
+  });
+}
+
+export function encryptGoogleChannelToken(token?: string | null) {
+  return token ? encryptText(token) : null;
+}
+
+export function verifyGoogleChannelToken(input: {
+  googleChannelTokenCipher?: string | null;
+  headerToken?: string | null;
+}) {
+  const storedToken = decryptText(input.googleChannelTokenCipher);
+  if (!storedToken || !input.headerToken) return false;
+  const stored = Buffer.from(storedToken);
+  const received = Buffer.from(input.headerToken);
+  return stored.byteLength === received.byteLength && timingSafeEqual(stored, received);
+}
+
+export class GoogleSyncTokenExpiredError extends Error {
+  constructor() {
+    super("O token incremental do Google Agenda expirou. Uma sincronização completa é necessária.");
+    this.name = "GoogleSyncTokenExpiredError";
+  }
+}
+
+function isGoneError(error: unknown) {
+  const responseStatus = (error as { response?: { status?: number } })?.response?.status;
+  const code = (error as { code?: number })?.code;
+  return responseStatus === 410 || code === 410;
 }
 
 export async function listChangedEvents(input: {
@@ -222,15 +254,27 @@ export async function listChangedEvents(input: {
     version: "v3",
     auth: clientFromStoredTokens(input.tokens),
   });
-  const response = await calendar.events.list({
-    calendarId: input.calendarId,
-    syncToken: input.syncToken ?? undefined,
-    singleEvents: true,
-    showDeleted: true,
-  });
+  const events: calendar_v3.Schema$Event[] = [];
+  let nextSyncToken: string | null = null;
+  let pageToken: string | undefined;
 
-  return {
-    events: response.data.items ?? [],
-    nextSyncToken: response.data.nextSyncToken ?? null,
-  };
+  try {
+    do {
+      const response = await calendar.events.list({
+        calendarId: input.calendarId,
+        syncToken: input.syncToken ?? undefined,
+        pageToken,
+        singleEvents: true,
+        showDeleted: true,
+      });
+      events.push(...(response.data.items ?? []));
+      pageToken = response.data.nextPageToken ?? undefined;
+      nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
+    } while (pageToken);
+  } catch (error) {
+    if (isGoneError(error)) throw new GoogleSyncTokenExpiredError();
+    throw error;
+  }
+
+  return { events, nextSyncToken };
 }

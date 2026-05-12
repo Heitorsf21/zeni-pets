@@ -2,13 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { centsFieldStrict, optionalStringField, stringField } from "@/lib/forms";
+import { derivePaymentStatus, sumPaidCents } from "@/lib/reservation-status";
 
 const VALID_KINDS = ["INCOME", "EXPENSE"] as const;
 const VALID_METHODS = ["PIX", "CASH", "CARD", "TRANSFER", "OTHER"] as const;
 
 export async function createFinancialEntryAction(formData: FormData) {
+  await requireUser();
   const amountCents = centsFieldStrict(formData, "amountCents");
   const category = stringField(formData, "category");
   const kindRaw = stringField(formData, "kind");
@@ -42,6 +45,7 @@ export async function createFinancialEntryAction(formData: FormData) {
 }
 
 export async function deleteFinancialEntryAction(id: string) {
+  await requireUser();
   const entry = await getPrisma().financialEntry.findUnique({
     where: { id },
     select: { isManual: true },
@@ -58,7 +62,12 @@ export async function deleteFinancialEntryAction(id: string) {
   redirect("/financeiro?deleted=1");
 }
 
-export async function markReservationPaidAction(id: string) {
+export async function markReservationPaidAction(id: string, formData?: FormData) {
+  await requireUser();
+  const methodRaw = formData ? stringField(formData, "method") : "PIX";
+  const method = (VALID_METHODS as readonly string[]).includes(methodRaw)
+    ? (methodRaw as (typeof VALID_METHODS)[number])
+    : "PIX";
   const reservation = await getPrisma().reservation.findUnique({
     where: { id },
     include: {
@@ -69,10 +78,7 @@ export async function markReservationPaidAction(id: string) {
   });
   if (!reservation) redirect("/financeiro?error=reserva-nao-encontrada");
 
-  const paidCents = reservation.payments.reduce(
-    (total, payment) => total + payment.amountCents,
-    0,
-  );
+  const paidCents = sumPaidCents(reservation.payments);
   const remainingCents = Math.max(reservation.totalCents - paidCents, 0);
 
   if (remainingCents > 0) {
@@ -80,10 +86,10 @@ export async function markReservationPaidAction(id: string) {
       data: {
         reservationId: id,
         amountCents: remainingCents,
-        method: "PIX",
+        method,
         status: "PAID",
         paidAt: new Date(),
-        notes: "Quitacao pelo financeiro",
+        notes: "Quitação pelo financeiro",
       },
     });
 
@@ -92,17 +98,17 @@ export async function markReservationPaidAction(id: string) {
         reservationId: id,
         kind: "INCOME",
         category: reservation.serviceType.name,
-        description: `Quitacao - ${reservation.tutor.name}`,
+        description: `Quitação - ${reservation.tutor.name}`,
         entryDate: new Date(),
         amountCents: remainingCents,
-        method: "PIX",
+        method,
       },
     });
   }
 
   await getPrisma().reservation.update({
     where: { id },
-    data: { paymentStatus: "PAID" },
+    data: { paymentStatus: derivePaymentStatus(paidCents + remainingCents, reservation.totalCents) },
   });
 
   revalidatePath("/dashboard");

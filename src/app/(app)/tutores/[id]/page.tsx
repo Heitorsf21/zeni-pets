@@ -19,9 +19,12 @@ import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationFormData, getTutorDetailData } from "@/lib/app-data";
 import { formatDateShort, formatDateTimeShort } from "@/lib/date";
 import { brl } from "@/lib/money";
-import { deleteTutorAction, toggleTutorStatusAction, updateTutorAction } from "../actions";
+import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
+import { adjustTutorCreditAction, deleteTutorAction, toggleTutorStatusAction, updateTutorAction } from "../actions";
 import { NovoPetModal } from "@/app/(app)/pets/novo-pet-modal";
 import { NovaReservaModal } from "@/app/(app)/reservas/nova-reserva-modal";
+import { sumCreditBalance } from "@/lib/credits";
+import { CreditoTutorModal } from "./credito-tutor-modal";
 import { EditarTutorModal } from "./editar-tutor-modal";
 
 function initials(name: string) {
@@ -72,9 +75,11 @@ export default async function TutorDetailPage({
   const toggleStatus = toggleTutorStatusAction.bind(null, tutor.id, tutor.status);
   const updateTutor = updateTutorAction.bind(null, tutor.id);
   const deleteTutor = deleteTutorAction.bind(null, tutor.id);
+  const adjustCredit = adjustTutorCreditAction.bind(null, tutor.id);
   const canDelete = tutor.reservations.length === 0;
   const totalCents = tutor.reservations.reduce((sum, reservation) => sum + reservation.totalCents, 0);
   const ticketCents = tutor.reservations.length ? Math.round(totalCents / tutor.reservations.length) : 0;
+  const creditBalanceCents = sumCreditBalance(tutor.creditTransactions);
   const recentReservations = tutor.reservations.slice(0, 6);
   const links = phoneLinks(tutor.phone);
 
@@ -112,7 +117,9 @@ export default async function TutorDetailPage({
             <NovaReservaModal
               tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-              serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+              serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+              seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+              depositPercent={formData.settings?.depositPercent ?? 50}
               defaultTutorId={tutor.id}
             />
           </>
@@ -149,11 +156,11 @@ export default async function TutorDetailPage({
                       <div>
                         <div style={{ fontSize: 15, fontWeight: 600 }}>{pet.name}</div>
                         <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                          {pet.breed || "Raca pendente"} - {pet.ageLabel || "idade pendente"}
+                          {pet.breed || "Raça pendente"} - {pet.ageLabel || "idade pendente"}
                         </div>
                         <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                          <span className="badge badge--ativo">{pet.isNeutered ? "Castrado" : "Nao castrado"}</span>
-                          <span className="badge badge--parcial">{pet.isSociable ? "Sociavel" : "Reservado"}</span>
+                    <span className="badge badge--ativo">{pet.isNeutered ? "Castrado" : "Não castrado"}</span>
+                          <span className="badge badge--parcial">{pet.isSociable ? "Sociável" : "Reservado"}</span>
                         </div>
                       </div>
                     </div>
@@ -170,7 +177,7 @@ export default async function TutorDetailPage({
             <section className="card">
               <div className="card__header">
                 <div>
-                  <div className="card__title"><Clock /> Historico de reservas</div>
+                  <div className="card__title"><Clock /> Histórico de reservas</div>
                   <div className="card__subtitle">{tutor.reservations.length} reservas no total</div>
                 </div>
               </div>
@@ -179,7 +186,7 @@ export default async function TutorDetailPage({
                   <thead>
                     <tr>
                       <th>Data</th>
-                      <th>Servico</th>
+                      <th>Serviço</th>
                       <th>Status</th>
                       <th>Pagamento</th>
                       <th className="table__num">Valor</th>
@@ -212,10 +219,46 @@ export default async function TutorDetailPage({
 
             <section className="card">
               <div className="card__header">
-                <div className="card__title">Observacoes</div>
+                <div className="card__title">Observações</div>
               </div>
               <div className="card__body" style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.55 }}>
                 {tutor.notes || "Sem observacoes cadastradas para este tutor."}
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="card__header">
+                <div>
+                  <div className="card__title"><Wallet /> Extrato de crédito</div>
+                  <div className="card__subtitle">Saldo atual {brl(creditBalanceCents)}</div>
+                </div>
+                <CreditoTutorModal balance={brl(creditBalanceCents)} action={adjustCredit} />
+              </div>
+              <div className="card__body card__body--flush">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Tipo</th>
+                      <th>Descrição</th>
+                      <th className="table__num">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tutor.creditTransactions.length ? tutor.creditTransactions.map((transaction) => (
+                      <tr key={transaction.id}>
+                        <td className="mono">{formatDateShort(transaction.entryDate)}</td>
+                        <td>{transaction.type === "CREDIT_ADDED" ? "Credito" : transaction.type === "CREDIT_USED" ? "Uso" : "Ajuste"}</td>
+                        <td className="muted">{transaction.description || "-"}</td>
+                        <td className="table__num mono">{brl(transaction.amountCents)}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={4} className="muted">Nenhum crédito registrado para este cliente.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </section>
 
@@ -234,10 +277,11 @@ export default async function TutorDetailPage({
                   <dt>E-mail</dt><dd>{tutor.email || "-"}</dd>
                   <dt>CPF/RG</dt><dd className="mono">{tutor.document || "-"}</dd>
                   <dt>Nascimento</dt><dd>{longDate(tutor.birthDate)}</dd>
-                  <dt>Endereco</dt><dd>{tutor.address || "-"}{tutor.cep ? <><br /><span className="mono subtle">CEP {tutor.cep}</span></> : null}</dd>
+                  <dt>Endereço</dt><dd>{tutor.address || "-"}{tutor.cep ? <><br /><span className="mono subtle">CEP {tutor.cep}</span></> : null}</dd>
                   <dt>{tutor.clientSinceIsSystemOnly ? "Cadastro no sistema" : "Cliente desde"}</dt><dd>{longDate(tutor.clientSince)}</dd>
                   <dt>Total gasto</dt><dd className="mono">{brl(totalCents)}</dd>
                   <dt>Ticket medio</dt><dd className="mono">{brl(ticketCents)}</dd>
+                  <dt>Credito disponivel</dt><dd className="mono">{brl(creditBalanceCents)}</dd>
                 </dl>
                 <div className="row" style={{ gap: 6, marginTop: 14 }}>
                   <a className="btn btn--sm" href={links.tel} style={{ flex: 1 }}><Phone /> Ligar</a>
@@ -255,16 +299,17 @@ export default async function TutorDetailPage({
                   <dt>Pets</dt><dd className="mono">{tutor.pets.length}</dd>
                   <dt>Reservas</dt><dd className="mono">{tutor.reservations.length}</dd>
                   <dt>Ultima visita</dt><dd>{recentReservations[0] ? formatDateShort(recentReservations[0].startsAt) : "-"}</dd>
+                  <dt>Credito aberto</dt><dd className="mono">{brl(creditBalanceCents)}</dd>
                 </dl>
               </div>
             </section>
 
             <section className="card">
               <div className="card__header">
-                <div className="card__title"><MapPin /> Endereco rapido</div>
+                <div className="card__title"><MapPin /> Endereço rápido</div>
               </div>
               <div className="card__body muted" style={{ fontSize: 13, lineHeight: 1.55 }}>
-                {tutor.address || "Endereco nao informado."}
+                {tutor.address || "Endereço não informado."}
               </div>
             </section>
 
@@ -276,7 +321,9 @@ export default async function TutorDetailPage({
                 <NovaReservaModal
                   tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
                   pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-                  serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+                  serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+                  seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+                  depositPercent={formData.settings?.depositPercent ?? 50}
                   defaultTutorId={tutor.id}
                   triggerVariant="default"
                 />

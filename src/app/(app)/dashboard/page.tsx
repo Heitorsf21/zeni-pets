@@ -19,6 +19,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { ConfirmForm } from "@/components/ui/confirm-form";
 import { getDashboardData, getReservationFormData } from "@/lib/app-data";
+import { prepareRevenueChartData } from "@/lib/dashboard-chart";
+import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { deleteTaskAction, toggleTaskOccurrenceAction } from "./actions";
 import { NovaTarefaModal } from "./nova-tarefa-modal";
 import { NovaReservaModal } from "@/app/(app)/reservas/nova-reserva-modal";
@@ -33,12 +35,16 @@ export default async function DashboardPage({
   const sp = (await searchParams) ?? {};
   const [dashboard, formData] = await Promise.all([getDashboardData(), getReservationFormData()]);
   const occupancy = dashboard.capacity ? Math.round((dashboard.hostedCount / dashboard.capacity) * 100) : 0;
+  const occupancyWidth = Math.max(0, Math.min(occupancy, 100));
+  const capacityLabel = `Capacidade do hotel: ${dashboard.hostedCount} de ${dashboard.capacity} vagas ocupadas (${occupancy}%).`;
+  const today = new Date();
+  const revenueChart = prepareRevenueChartData(dashboard.monthlyRevenue, today.getFullYear());
   const todayLabel = new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
     day: "2-digit",
     month: "long",
     year: "numeric",
-  }).format(new Date());
+  }).format(today);
   const doneTasks = dashboard.tasks.filter((task) => task.done).length;
 
   return (
@@ -50,7 +56,9 @@ export default async function DashboardPage({
           <NovaReservaModal
             tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
             pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-            serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+            serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+            seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+            depositPercent={formData.settings?.depositPercent ?? 50}
           />
         }
       />
@@ -88,7 +96,7 @@ export default async function DashboardPage({
                       <th>Check-in</th>
                       <th>Check-out</th>
                       <th>Status</th>
-                      <th aria-label="Acoes" />
+                      <th aria-label="Ações" />
                     </tr>
                   </thead>
                   <tbody>
@@ -123,9 +131,9 @@ export default async function DashboardPage({
               <div className="card__header">
                 <div>
                   <div className="card__title">
-                    <Clock /> Proximos servicos - 48h
+                    <Clock /> Próximos serviços - 48h
                   </div>
-                  <div className="card__subtitle">Chegadas e saidas previstas</div>
+                  <div className="card__subtitle">Chegadas e saídas previstas</div>
                 </div>
               </div>
               <div className="card__body card__body--flush">
@@ -157,45 +165,72 @@ export default async function DashboardPage({
                   </Link>
                 )) : (
                   <div className="muted" style={{ padding: "12px 16px", fontSize: 13 }}>
-                    Nenhuma chegada ou saida nas proximas 48h.
+                    Nenhuma chegada ou saída nas próximas 48h.
                   </div>
                 )}
               </div>
             </section>
 
-            <section className="card">
+            <section className="card revenue-card">
               <div className="card__header">
                 <div>
                   <div className="card__title">
                     <TrendingUp /> Faturamento mensal
                   </div>
-                  <div className="card__subtitle">Ultimos 6 meses</div>
+                  <div className="card__subtitle">Últimos 6 meses</div>
                 </div>
-                <div className="row">
-                  <span className="subtle" style={{ fontSize: 11 }}>2026</span>
-                  <span className="subtle" style={{ fontSize: 11 }}>2025</span>
+                <div className="revenue-legend" aria-label="Legenda do faturamento mensal">
+                  <span><i className="revenue-legend__swatch revenue-legend__swatch--current" /> {revenueChart.currentYear}</span>
+                  <span><i className="revenue-legend__swatch revenue-legend__swatch--previous" /> {revenueChart.previousYear}</span>
                 </div>
               </div>
               <div className="card__body">
-                <div className="bars" style={{ gridTemplateColumns: "repeat(6, 1fr)", gap: 24 }}>
-                  {dashboard.monthlyRevenue.map((month) => {
-                    const max = 8500;
-                    return (
-                      <div className="stack" key={month.month} style={{ gap: 4, alignItems: "center" }}>
-                        <div className="row" style={{ height: 120, alignItems: "end" }}>
-                          <div
-                            className="bars__bar bars__bar--prev"
-                            style={{ width: 16, height: `${(month.previous / max) * 100}%` }}
+                <div
+                  className="revenue-chart"
+                  role="group"
+                  aria-label={`Faturamento mensal dos últimos 6 meses. Escala até ${revenueChart.maxLabel}.`}
+                >
+                  {revenueChart.points.map((month, index) => (
+                    <div className="revenue-chart__month" key={month.month}>
+                      <div className="revenue-chart__plot">
+                        <div
+                          className="revenue-chart__group"
+                          tabIndex={0}
+                          title={month.ariaLabel}
+                          aria-label={month.ariaLabel}
+                          data-edge={
+                            index === 0
+                              ? "start"
+                              : index === revenueChart.points.length - 1
+                                ? "end"
+                                : "middle"
+                          }
+                        >
+                          <span className="revenue-chart__tooltip" role="tooltip">
+                            <strong>{month.month}</strong>
+                            <span>{revenueChart.currentYear}: {month.currentLabel}</span>
+                            <span>{revenueChart.previousYear}: {month.previousLabel}</span>
+                            {month.diffLabel ? (
+                              <span className={`revenue-chart__diff revenue-chart__diff--${month.diffTone}`}>
+                                {month.diffLabel}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span
+                            className="revenue-chart__bar revenue-chart__bar--previous"
+                            style={{ height: `${month.previousHeight}%` }}
+                            aria-hidden="true"
                           />
-                          <div
-                            className="bars__bar bars__bar--current"
-                            style={{ width: 16, height: `${(month.current / max) * 100}%` }}
+                          <span
+                            className="revenue-chart__bar revenue-chart__bar--current"
+                            style={{ height: `${month.currentHeight}%` }}
+                            aria-hidden="true"
                           />
                         </div>
-                        <div className="bars__label">{month.month}</div>
                       </div>
-                    );
-                  })}
+                      <span className="revenue-chart__label">{month.month}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </section>
@@ -211,8 +246,20 @@ export default async function DashboardPage({
                 <strong>{occupancy}%</strong>
               </div>
               <div className="card__body">
-                <div className="progress">
-                  <div className="progress__bar" style={{ width: `${Math.min(occupancy, 100)}%` }} />
+                <div
+                  className="progress progress--interactive"
+                  role="meter"
+                  tabIndex={0}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={occupancyWidth}
+                  aria-valuetext={capacityLabel}
+                  title={capacityLabel}
+                >
+                  <div className="progress__track">
+                    <div className="progress__bar" style={{ width: `${occupancyWidth}%` }} />
+                  </div>
+                  <span className="progress__tooltip" role="tooltip">{capacityLabel}</span>
                 </div>
                 <p className="subtle" style={{ margin: "10px 0 0", fontSize: 12 }}>
                   Capacidade atual: <strong>{dashboard.hostedCount}</strong> de {dashboard.capacity} vagas.
@@ -225,7 +272,7 @@ export default async function DashboardPage({
                 <div>
                   <div className="card__title">Tarefas do dia</div>
                   <div className="card__subtitle">
-                    {dashboard.tasks.length ? `${doneTasks} de ${dashboard.tasks.length} concluidas` : "Nenhuma tarefa para hoje"}
+                    {dashboard.tasks.length ? `${doneTasks} de ${dashboard.tasks.length} concluídas` : "Nenhuma tarefa para hoje"}
                   </div>
                 </div>
                 <NovaTarefaModal />
@@ -265,7 +312,7 @@ export default async function DashboardPage({
             <section className="card">
               <div className="card__header">
                 <div className="card__title">
-                  <Footprints /> Pet Sitter - proximas visitas
+                  <Footprints /> Pet Sitter - próximas visitas
                 </div>
               </div>
               <div className="card__body card__body--flush">

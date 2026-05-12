@@ -2,22 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { optionalStringField, stringField } from "@/lib/forms";
-import { parseDatetimeLocal, startOfDay } from "@/lib/date";
-
-/** Generate one TaskOccurrence per day between startsAt..endsAt (inclusive). */
-function generateOccurrenceDates(startsAt: Date, endsAt: Date | null): Date[] {
-  const start = startOfDay(startsAt);
-  const end = startOfDay(endsAt ?? startsAt);
-  const dates: Date[] = [];
-  for (let d = new Date(start); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
-    dates.push(new Date(d));
-  }
-  return dates;
-}
+import { parseDatetimeLocal } from "@/lib/date";
+import { generateTaskOccurrenceDates } from "@/lib/tasks";
 
 export async function createTaskAction(formData: FormData) {
+  await requireUser();
   const title = stringField(formData, "title");
   if (!title) redirect("/dashboard?error=titulo-obrigatorio");
 
@@ -31,7 +23,7 @@ export async function createTaskAction(formData: FormData) {
   const tutorId = optionalStringField(formData, "tutorId");
   const reservationId = optionalStringField(formData, "reservationId");
 
-  const occurrenceDates = generateOccurrenceDates(taskDate, endsAt);
+  const occurrenceDates = generateTaskOccurrenceDates(taskDate, endsAt);
 
   await getPrisma().task.create({
     data: {
@@ -57,6 +49,7 @@ export async function createTaskAction(formData: FormData) {
 }
 
 export async function toggleTaskOccurrenceAction(id: string) {
+  await requireUser();
   const occurrence = await getPrisma().taskOccurrence.findUnique({
     where: { id },
     select: { status: true, task: { select: { petId: true, tutorId: true } } },
@@ -78,6 +71,7 @@ export async function toggleTaskOccurrenceAction(id: string) {
 }
 
 export async function deleteTaskAction(id: string) {
+  await requireUser();
   const task = await getPrisma().task.findUnique({
     where: { id },
     select: { petId: true, tutorId: true },

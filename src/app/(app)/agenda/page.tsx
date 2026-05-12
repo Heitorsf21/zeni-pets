@@ -8,12 +8,13 @@ import {
   getReservationsByMonthData,
   getUpcomingReservationsData,
 } from "@/lib/app-data";
+import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { NovaReservaModal } from "@/app/(app)/reservas/nova-reserva-modal";
 import { AgendaMonthPicker } from "./month-picker";
 
 const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 
-const MONTH_LABELS_PT = ["Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const MONTH_LABELS_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 function buildMonthGrid(reference: Date) {
   const first = new Date(reference.getFullYear(), reference.getMonth(), 1);
@@ -68,7 +69,9 @@ export default async function AgendaPage({
           <NovaReservaModal
             tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
             pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
-            serviceTypes={formData.serviceTypes.map((s) => ({ id: s.id, name: s.name }))}
+            serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
+            seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
+            depositPercent={formData.settings?.depositPercent ?? 50}
           />
         }
       />
@@ -83,14 +86,14 @@ export default async function AgendaPage({
               <div className="card__subtitle">Use as setas para navegar entre meses</div>
             </div>
             <div className="row">
-              <Link className="btn btn--sm" href={monthHref(prevMonth)} aria-label="Mes anterior">
+              <Link className="btn btn--sm" href={monthHref(prevMonth)} aria-label="Mês anterior">
                 <ChevronLeft />
               </Link>
               <AgendaMonthPicker defaultValue={monthValue} />
               {isCurrentMonth ? null : (
-                <Link className="btn btn--sm" href="/agenda" title="Voltar para o mes atual">Mes atual</Link>
+                <Link className="btn btn--sm" href="/agenda" title="Voltar para o mês atual">Mês atual</Link>
               )}
-              <Link className="btn btn--sm" href={monthHref(nextMonth)} aria-label="Proximo mes">
+              <Link className="btn btn--sm" href={monthHref(nextMonth)} aria-label="Próximo mês">
                 <ChevronRight />
               </Link>
             </div>
@@ -142,8 +145,8 @@ export default async function AgendaPage({
         <section className="card">
           <div className="card__header">
             <div>
-              <div className="card__title">Proximas reservas</div>
-              <div className="card__subtitle">{upcoming.length} reservas nos proximos 14 dias</div>
+              <div className="card__title">Próximas reservas</div>
+              <div className="card__subtitle">{upcoming.length} reservas nos próximos 14 dias</div>
             </div>
           </div>
           <div className="card__body card__body--flush">
@@ -152,7 +155,7 @@ export default async function AgendaPage({
                 <tr>
                   <th>Tutor</th>
                   <th>Tipo</th>
-                  <th>Periodo</th>
+                  <th>Período</th>
                   <th>Status</th>
                   <th>Pagamento</th>
                   <th className="table__num">Valor</th>
@@ -169,7 +172,7 @@ export default async function AgendaPage({
                     <td className="table__num">{reservation.value}</td>
                   </tr>
                 )) : (
-                  <tr><td colSpan={6} className="muted">Nenhuma reserva nos proximos 14 dias.</td></tr>
+                  <tr><td colSpan={6} className="muted">Nenhuma reserva nos próximos 14 dias.</td></tr>
                 )}
               </tbody>
             </table>

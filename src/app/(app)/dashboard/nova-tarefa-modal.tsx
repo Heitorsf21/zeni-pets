@@ -25,7 +25,7 @@ export function NovaTarefaModal({ triggerLabel = "Nova tarefa", petId, petLabel 
         {petId ? <input type="hidden" name="petId" value={petId} /> : null}
         <label className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Titulo</span>
-          <input className="input" name="title" placeholder="Ex.: Dar racao da manha" required autoFocus />
+          <input className="input" name="title" placeholder="Ex.: Dar ração da manhã" required autoFocus />
         </label>
         {petLabel ? (
           <p className="muted" style={{ gridColumn: "1 / -1", margin: 0, fontSize: 12 }}>
@@ -33,7 +33,7 @@ export function NovaTarefaModal({ triggerLabel = "Nova tarefa", petId, petLabel 
           </p>
         ) : null}
         <label className="field">
-          <span className="field__label">Inicio</span>
+          <span className="field__label">Início</span>
           <input className="input" name="taskDate" type="datetime-local" required />
         </label>
         <label className="field">
@@ -41,11 +41,11 @@ export function NovaTarefaModal({ triggerLabel = "Nova tarefa", petId, petLabel 
           <input className="input" name="endsAt" type="datetime-local" />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Descricao</span>
+          <span className="field__label">Descrição</span>
           <textarea className="textarea" name="description" placeholder="Detalhes que ajudam na execucao da tarefa" />
         </label>
         <p className="subtle" style={{ gridColumn: "1 / -1", margin: 0, fontSize: 11 }}>
-          Quando voce define um termino, a tarefa aparece todo dia entre o inicio e o fim e pode ser concluida em cada dia.
+          Quando você define um término, a tarefa aparece todo dia entre o início e o fim e pode ser concluída em cada dia.
         </p>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>
           <button className="btn btn--primary" type="submit">Salvar tarefa</button>

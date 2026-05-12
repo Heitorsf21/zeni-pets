@@ -100,6 +100,21 @@ function totalRowAmountCents(row: Record<string, unknown>) {
   return null;
 }
 
+function inferFinancialEntryKind(category: unknown) {
+  const text = String(category ?? "").trim().toLowerCase();
+  const incomeSignals = [
+    "hosped",
+    "creche",
+    "visita",
+    "passeio",
+    "dog walker",
+    "pet sitter",
+    "taxi",
+  ];
+
+  return incomeSignals.some((signal) => text.includes(signal)) ? "INCOME" : "EXPENSE";
+}
+
 function parsePriceSheet(fileName: string, workbook: SimpleWorkbook): ImportBatchDraft {
   const sheetName = workbook.sheetNames[0];
   const rows = workbook.sheets[sheetName];
@@ -243,6 +258,7 @@ function parseOperationalWorkbook(
         sourceRow,
         rawPayload: raw,
         normalizedPayload: {
+          kind: inferFinancialEntryKind(raw["Categoria"]),
           category: raw["Categoria"],
           date: normalizeDateValue(raw["Data"]),
           amountCents: parseCurrencyToCents(raw["Valor"]),

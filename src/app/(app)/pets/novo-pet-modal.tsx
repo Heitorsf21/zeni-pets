@@ -43,25 +43,25 @@ export function NovoPetModal({ tutors, defaultTutorId, fixedTutorId, triggerLabe
           <input className="input" name="name" required autoFocus />
         </label>
         <label className="field">
-          <span className="field__label">Especie</span>
+          <span className="field__label">Espécie</span>
           <select className="select" name="species" defaultValue="dog">
             <option value="dog">Cachorro</option>
             <option value="cat">Gato</option>
             <option value="other">Outro</option>
           </select>
         </label>
-        <label className="field"><span className="field__label">Raca</span><input className="input" name="breed" /></label>
+        <label className="field"><span className="field__label">Raça</span><input className="input" name="breed" /></label>
         <label className="field"><span className="field__label">Idade</span><input className="input" name="ageLabel" /></label>
         <div className="row" style={{ gridColumn: "1 / -1" }}>
           <label className="check"><input type="checkbox" name="isNeutered" /> Castrado</label>
-          <label className="check"><input type="checkbox" name="isSociable" /> Sociavel</label>
+          <label className="check"><input type="checkbox" name="isSociable" /> Sociável</label>
         </div>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Alimentacao</span>
+          <span className="field__label">Alimentação</span>
           <textarea className="textarea" name="foodNotes" />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Saude</span>
+          <span className="field__label">Saúde</span>
           <textarea className="textarea" name="healthNotes" />
         </label>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>

@@ -29,9 +29,9 @@ const FIELD_LABELS: Record<TutorMergeFieldDiff["field"], string> = {
   phone: "Telefone",
   document: "CPF/RG",
   birthDate: "Nascimento",
-  address: "Endereco",
+  address: "Endereço",
   cep: "CEP",
-  notes: "Observacoes",
+  notes: "Observações",
 };
 
 function formatFieldValue(field: TutorMergeFieldDiff["field"], value: string | null): string {
@@ -204,7 +204,7 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
         <div className="modal__body">
           {loadingPreview ? (
             <div className="row" style={{ justifyContent: "center", padding: 32 }}>
-              <Loader2 style={{ animation: "spin 1s linear infinite" }} /> Carregando comparacao...
+              <Loader2 style={{ animation: "spin 1s linear infinite" }} /> Carregando comparação...
             </div>
           ) : null}
 
@@ -234,7 +234,7 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
 
               {preview.warnings.length ? (
                 <div className="alert alert--danger" role="alert" style={{ background: "rgba(255, 200, 0, 0.12)", color: "#7a4a00", borderColor: "#f0b400" }}>
-                  <strong>Atencao</strong>
+                  <strong>Atenção</strong>
                   <ul style={{ margin: "8px 0 0 16px", padding: 0 }}>
                     {preview.warnings.map((warning, idx) => (
                       <li key={idx}>{warning}</li>
@@ -288,7 +288,7 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
                 <section>
                   <div className="card__title" style={{ marginBottom: 8 }}>2. Campos divergentes</div>
                   <div className="subtle" style={{ marginBottom: 8 }}>
-                    Para cada campo abaixo, escolha qual valor deve ficar no tutor canonico. &quot;Automatico&quot; mantem o valor do canonico se houver, senao pega o primeiro nao vazio.
+                    Para cada campo abaixo, escolha qual valor deve ficar no tutor canônico. &quot;Automático&quot; mantém o valor do canônico se houver, senão pega o primeiro não vazio.
                   </div>
                   <div className="stack" style={{ gap: 12 }}>
                     {preview.fields
@@ -341,7 +341,7 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
                   {totals.pets} pets, {totals.reservations} reservas e {totals.tasks} tarefas serao movidos para
                   {" "}<strong>{tutorsById.get(canonicalId)?.name}</strong>.
                   {" "}{totals.duplicates} {totals.duplicates === 1 ? "tutor sera removido" : "tutores serao removidos"}.
-                  Esta acao nao pode ser desfeita.
+                  Esta ação não pode ser desfeita.
                 </div>
               </section>
 

@@ -1,18 +1,22 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
+import type { ReservationSeasonOption, ReservationServiceOption } from "@/lib/reservation-form-options";
 import { createReservationAction } from "./actions";
+import { ReservationPetFields } from "./reservation-pet-fields";
+import { ReservationPricingPreview } from "./reservation-pricing-preview";
+import { ReservationTaskFields } from "./reservation-task-fields";
+import { ServicePriceRuleFields } from "./service-price-rule-fields";
 
 type Tutor = { id: string; name: string };
 type Pet = { id: string; name: string; tutor: { id: string; name: string } };
-type ServiceType = { id: string; name: string };
-
 type Props = {
   tutors: Tutor[];
   pets: Pet[];
-  serviceTypes: ServiceType[];
+  serviceTypes: ReservationServiceOption[];
+  seasonPeriods?: ReservationSeasonOption[];
+  depositPercent?: number;
   defaultTutorId?: string;
   defaultPetId?: string;
   triggerVariant?: "primary" | "default";
@@ -23,14 +27,13 @@ export function NovaReservaModal({
   tutors,
   pets,
   serviceTypes,
+  seasonPeriods = [],
+  depositPercent = 50,
   defaultTutorId,
   defaultPetId,
   triggerVariant = "primary",
   triggerLabel = "Nova reserva",
 }: Props) {
-  const [selectedTutorId, setSelectedTutorId] = useState(defaultTutorId ?? "");
-  const filteredPets = selectedTutorId ? pets.filter((p) => p.tutor.id === selectedTutorId) : pets;
-
   return (
     <Modal
       trigger={
@@ -42,46 +45,13 @@ export function NovaReservaModal({
       width={680}
     >
       <form className="form-grid" action={createReservationAction}>
-        <label className="field">
-          <span className="field__label">Tutor</span>
-          <select
-            className="select"
-            name="tutorId"
-            required
-            value={selectedTutorId}
-            onChange={(event) => setSelectedTutorId(event.target.value)}
-          >
-            <option value="">Selecione</option>
-            {tutors.map((tutor) => (
-              <option key={tutor.id} value={tutor.id}>{tutor.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="field__label">Servico</span>
-          <select className="select" name="serviceTypeId" required defaultValue={serviceTypes[0]?.id}>
-            {serviceTypes.map((serviceType) => (
-              <option key={serviceType.id} value={serviceType.id}>{serviceType.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Pets</span>
-          <select
-            className="select"
-            name="petIds"
-            multiple
-            required
-            defaultValue={defaultPetId ? [defaultPetId] : undefined}
-            style={{ minHeight: 96 }}
-          >
-            {filteredPets.length ? filteredPets.map((pet) => (
-              <option key={pet.id} value={pet.id}>{pet.name} - {pet.tutor.name}</option>
-            )) : (
-              <option disabled>Selecione um tutor para ver os pets</option>
-            )}
-          </select>
-        </label>
+        <ReservationPetFields
+          tutors={tutors}
+          pets={pets}
+          defaultTutorId={defaultTutorId}
+          defaultPetId={defaultPetId}
+        />
+        <ServicePriceRuleFields serviceTypes={serviceTypes} />
         <label className="field">
           <span className="field__label">Check-in</span>
           <input className="input" name="startsAt" type="datetime-local" required />
@@ -98,12 +68,12 @@ export function NovaReservaModal({
           </select>
         </label>
         <label className="field">
-          <span className="field__label">Distancia taxi pet (km)</span>
+          <span className="field__label">Distância taxi pet (km)</span>
           <input className="input" name="distanceKm" defaultValue="0" />
         </label>
         <label className="field">
-          <span className="field__label">Valor base</span>
-          <input className="input" name="baseAmountCents" placeholder="0,00" />
+          <span className="field__label">Valor base manual</span>
+          <input className="input" name="baseAmountCents" placeholder="automático" />
         </label>
         <label className="field">
           <span className="field__label">Desconto</span>
@@ -113,11 +83,18 @@ export function NovaReservaModal({
           <span className="field__label">Adicionais</span>
           <input className="input" name="additionalCents" defaultValue="0,00" />
         </label>
+        <ReservationPricingPreview
+          serviceTypes={serviceTypes}
+          seasonPeriods={seasonPeriods}
+          depositPercent={depositPercent}
+          compact
+        />
+        <ReservationTaskFields pets={pets} />
         <label className="check">
           <input type="checkbox" name="inviteTutor" /> Enviar convite ao tutor
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Observacoes</span>
+          <span className="field__label">Observações</span>
           <textarea className="textarea" name="notes" />
         </label>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>

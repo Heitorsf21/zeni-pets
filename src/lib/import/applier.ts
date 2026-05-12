@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { deriveReservationStatus } from "@/lib/reservation-status";
+import { serviceKindFromName, slugifyServiceName } from "@/lib/service-types";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -17,42 +18,153 @@ function paymentMethodFromText(value: unknown) {
   return "OTHER" as const;
 }
 
+export function isClientCreditPeriod(value: unknown) {
+  const text = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return text.includes("ficou") && text.includes("credito");
+}
+
+function normalizePeriodText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/Ã /g, "a")
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã\s*/g, "a")
+    .replace(/à|á/g, "a")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function makeLocalDate(year: number, month: number, day: number, hour: number) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day, hour, 0, 0, 0);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+}
+
+function dateRangeFromSingleDate(date: Date): [Date, Date] {
+  const start = new Date(date);
+  start.setHours(10, 0, 0, 0);
+  const end = new Date(date);
+  end.setHours(18, 0, 0, 0);
+  return [start, end];
+}
+
+function parseDateOnlyText(value: string) {
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+  if (iso) return makeLocalDate(Number(iso[1]), Number(iso[2]), Number(iso[3]), 10);
+
+  const br = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (br) return makeLocalDate(Number(br[3]), Number(br[2]), Number(br[1]), 10);
+
+  const serial = Number(value);
+  if (Number.isInteger(serial) && serial > 20_000 && serial < 80_000) {
+    const excelEpoch = Date.UTC(1899, 11, 30);
+    const parsed = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
+    return makeLocalDate(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate(), 10);
+  }
+
+  return null;
+}
+
+function inferStartYear(startMonth: number, endMonth: number, endYear: number) {
+  return startMonth > endMonth ? endYear - 1 : endYear;
+}
+
+function datePartsToRange(
+  start: { day: number; month: number; year?: number },
+  end: { day: number; month: number; year: number },
+) {
+  const startYear = start.year ?? inferStartYear(start.month, end.month, end.year);
+  const startsAt = makeLocalDate(startYear, start.month, start.day, 10);
+  const endsAt = makeLocalDate(end.year, end.month, end.day, 18);
+  if (!startsAt || !endsAt || endsAt.getTime() <= startsAt.getTime()) return null;
+  return [startsAt, endsAt] as [Date, Date];
+}
+
+function parseDateListPeriod(text: string): [Date, Date] | null {
+  const end = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
+  if (!end || !text.includes(",")) return null;
+
+  const parts = [...text.matchAll(/(\d{1,2})(?:\/(\d{1,2}))?(?:\/(\d{4}))?/g)];
+  if (!parts.length) return null;
+
+  const dates: Date[] = [];
+  let lastMonth = Number(end[2]);
+  let lastYear = Number(end[3]);
+
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    const day = Number(part[1]);
+    const month = part[2] ? Number(part[2]) : lastMonth;
+    const year = part[3] ? Number(part[3]) : inferStartYear(month, lastMonth, lastYear);
+    const date = makeLocalDate(year, month, day, 10);
+    if (!date) return null;
+    dates.push(date);
+    lastMonth = month;
+    lastYear = year;
+  }
+
+  const sorted = dates.sort((a, b) => a.getTime() - b.getTime());
+  const startsAt = new Date(sorted[0]);
+  startsAt.setHours(10, 0, 0, 0);
+  const endsAt = new Date(sorted[sorted.length - 1]);
+  endsAt.setHours(18, 0, 0, 0);
+  return endsAt.getTime() > startsAt.getTime() ? [startsAt, endsAt] : null;
+}
+
 /** Parse strings like "12 a 16/06/2025", "12 e 13/05/2025", "DD/MM/YYYY". Returns [start, end] or null. */
 export function parseHistoricalPeriod(period: string): [Date, Date] | null {
   if (!period) return null;
-  const trimmed = period.replace(/à/g, "a").replace(/\s+/g, " ").trim();
+  const trimmed = normalizePeriodText(period);
+
+  const singleDate = parseDateOnlyText(trimmed);
+  if (singleDate) return dateRangeFromSingleDate(singleDate);
 
   // Single date "DD/MM/YYYY"
   const single = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (single) {
-    const date = new Date(Number(single[3]), Number(single[2]) - 1, Number(single[1]), 10, 0, 0);
-    if (Number.isNaN(date.getTime())) return null;
-    return [date, new Date(date.getTime() + 8 * 60 * 60 * 1000)];
+    const date = makeLocalDate(Number(single[3]), Number(single[2]), Number(single[1]), 10);
+    if (!date) return null;
+    return dateRangeFromSingleDate(date);
   }
 
   // Range with 2 days "DD a DD/MM/YYYY" or "DD e DD/MM/YYYY"
-  const range = trimmed.match(/^(\d{1,2})\s*(?:a|e|-)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/i);
+  const range = trimmed.match(/^(\d{1,2})\s*(?:a|as|ate|e|-)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/i);
   if (range) {
     const startDay = Number(range[1]);
     const endDay = Number(range[2]);
-    const month = Number(range[3]) - 1;
+    const month = Number(range[3]);
     const year = Number(range[4]);
-    const start = new Date(year, month, startDay, 10, 0, 0);
-    const end = new Date(year, month, endDay, 18, 0, 0);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+    const start = makeLocalDate(year, month, startDay, 10);
+    const end = makeLocalDate(year, month, endDay, 18);
+    if (!start || !end || end.getTime() <= start.getTime()) return null;
     return [start, end];
   }
 
   // Full range "DD/MM/YYYY a DD/MM/YYYY"
-  const fullRange = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(?:a|e|-)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/i);
+  const fullRange = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(?:a|as|ate|e|-)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/i);
   if (fullRange) {
-    const start = new Date(Number(fullRange[3]), Number(fullRange[2]) - 1, Number(fullRange[1]), 10, 0, 0);
-    const end = new Date(Number(fullRange[6]), Number(fullRange[5]) - 1, Number(fullRange[4]), 18, 0, 0);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-    return [start, end];
+    return datePartsToRange(
+      { day: Number(fullRange[1]), month: Number(fullRange[2]), year: Number(fullRange[3]) },
+      { day: Number(fullRange[4]), month: Number(fullRange[5]), year: Number(fullRange[6]) },
+    );
   }
 
-  return null;
+  const partialStartRange = trimmed.match(/^(\d{1,2})\/(\d{1,2})\s*(?:a|as|ate|e|-)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/i);
+  if (partialStartRange) {
+    return datePartsToRange(
+      { day: Number(partialStartRange[1]), month: Number(partialStartRange[2]) },
+      { day: Number(partialStartRange[3]), month: Number(partialStartRange[4]), year: Number(partialStartRange[5]) },
+    );
+  }
+
+  return parseDateListPeriod(trimmed);
 }
 
 /** Parse strings like "11:30 as 18h", "9h às 18h", "10:00 - 18:00". */
@@ -93,9 +205,43 @@ export async function findTutorsByName(db: Db, name: string) {
 }
 
 export async function findServiceTypeByName(db: Db, name: string) {
+  const slug = slugifyServiceName(name);
   return db.serviceType.findFirst({
-    where: { name: { contains: name, mode: "insensitive" } },
+    where: {
+      OR: [
+        { slug },
+        { name: { equals: name, mode: "insensitive" } },
+        { name: { contains: name, mode: "insensitive" } },
+      ],
+    },
     select: { id: true, name: true, kind: true },
+  });
+}
+
+async function findOrCreateServiceType(db: Db, serviceName: string) {
+  const slug = slugifyServiceName(serviceName);
+  const existing = await db.serviceType.findFirst({
+    where: {
+      OR: [
+        { slug },
+        { name: { equals: serviceName, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true, slug: true },
+  });
+  if (existing) {
+    return db.serviceType.update({
+      where: { id: existing.id },
+      data: { slug: existing.slug ?? slug },
+    });
+  }
+
+  return db.serviceType.create({
+    data: {
+      name: serviceName,
+      slug,
+      kind: serviceKindFromName(serviceName),
+    },
   });
 }
 
@@ -152,7 +298,33 @@ function asDateOrNull(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function financialEntryKindFromPayload(payload: Record<string, unknown>) {
+  const explicit = asString(payload.kind)?.toUpperCase();
+  if (explicit === "INCOME" || explicit === "EXPENSE") return explicit;
+
+  const category = (asString(payload.category) ?? "").toLowerCase();
+  const incomeSignals = [
+    "hosped",
+    "creche",
+    "visita",
+    "passeio",
+    "dog walker",
+    "pet sitter",
+    "taxi pet",
+    "taxi",
+    "daycare",
+  ];
+
+  return incomeSignals.some((signal) => category.includes(signal)) ? "INCOME" : "EXPENSE";
+}
+
 export async function applyClientForm(db: Db, recordId: string, payload: Record<string, unknown>): Promise<ApplyResult> {
+  const existing = await db.tutor.findFirst({
+    where: { importRecordId: recordId },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, targetModel: "Tutor", targetId: existing.id };
+
   const tutorName = asString(payload.tutorName);
   if (!tutorName) return { ok: false, reason: "tutor-sem-nome" };
 
@@ -185,22 +357,16 @@ export async function applyClientForm(db: Db, recordId: string, payload: Record<
 }
 
 export async function applyServicePrice(db: Db, recordId: string, payload: Record<string, unknown>): Promise<ApplyResult> {
+  const existing = await db.servicePriceRule.findFirst({
+    where: { importRecordId: recordId },
+    select: { serviceTypeId: true },
+  });
+  if (existing) return { ok: true, targetModel: "ServiceType", targetId: existing.serviceTypeId };
+
   const serviceName = asString(payload.service);
   if (!serviceName) return { ok: false, reason: "servico-sem-nome" };
 
-  const slug = serviceName.toLowerCase().replace(/\s+/g, "-");
-  const lower = serviceName.toLowerCase();
-  const service = await db.serviceType.upsert({
-    where: { id: `imported-${slug}` },
-    create: {
-      id: `imported-${slug}`,
-      name: serviceName,
-      kind: lower.includes("creche") ? "DAYCARE" :
-            lower.includes("hosped") ? "BOARDING" :
-            lower.includes("visit") ? "PET_SITTING" : "OTHER",
-    },
-    update: {},
-  });
+  const service = await findOrCreateServiceType(db, serviceName);
 
   const label = asString(payload.details) ?? "1° pet";
   for (const method of ["PIX", "CARD"] as const) {
@@ -233,17 +399,18 @@ export async function applyServicePrice(db: Db, recordId: string, payload: Recor
 }
 
 export async function applyTaxiRule(db: Db, recordId: string, payload: Record<string, unknown>): Promise<ApplyResult> {
+  const existing = await db.servicePriceRule.findFirst({
+    where: { importRecordId: recordId },
+    select: { serviceTypeId: true },
+  });
+  if (existing) return { ok: true, targetModel: "ServiceType", targetId: existing.serviceTypeId };
+
   const name = asString(payload.name) ?? "Taxi pet";
-  const id = `imported-${name.toLowerCase().replace(/\s+/g, "-")}`;
   const fixedFeeCents = asNumberOrNull(payload.fixedFeeCents);
   const perKmCents = asNumberOrNull(payload.perKmCents);
   const hygieneFeeCents = asNumberOrNull(payload.hygieneFeeCents);
 
-  const service = await db.serviceType.upsert({
-    where: { id },
-    create: { id, name, kind: "TAXI_PET" },
-    update: { name },
-  });
+  const service = await findOrCreateServiceType(db, name);
   await db.servicePriceRule.upsert({
     where: {
       serviceTypeId_label_paymentMethod: {
@@ -268,13 +435,19 @@ export async function applyTaxiRule(db: Db, recordId: string, payload: Record<st
 }
 
 export async function applyFinancialEntry(db: Db, recordId: string, payload: Record<string, unknown>): Promise<ApplyResult> {
+  const existing = await db.financialEntry.findFirst({
+    where: { importRecordId: recordId },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, targetModel: "FinancialEntry", targetId: existing.id };
+
   const amount = asNumberOrNull(payload.amountCents);
   if (amount == null || amount <= 0) return { ok: false, reason: "valor-invalido" };
   const entryDate = asDateOrNull(payload.date) ?? new Date();
   const category = asString(payload.category) ?? "Importado";
   const entry = await db.financialEntry.create({
     data: {
-      kind: "INCOME",
+      kind: financialEntryKindFromPayload(payload),
       category,
       description: category,
       entryDate,
@@ -287,6 +460,12 @@ export async function applyFinancialEntry(db: Db, recordId: string, payload: Rec
 }
 
 export async function applyFinancialSummary(db: Db, recordId: string, payload: Record<string, unknown>): Promise<ApplyResult> {
+  const existing = await db.financialSummary.findFirst({
+    where: { importRecordId: recordId },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, targetModel: "FinancialSummary", targetId: existing.id };
+
   const sheetName = asString(payload.sheetName) ?? "";
   const parsed = parseFinancialSummarySheet(sheetName);
   if (!parsed) return { ok: false, reason: "mes-invalido" };
@@ -315,6 +494,45 @@ export async function applyFinancialSummary(db: Db, recordId: string, payload: R
   return { ok: true, targetModel: "FinancialSummary", targetId: summary.id };
 }
 
+async function applyClientCreditEntry(db: Db, recordId: string, payload: Record<string, unknown>): Promise<ApplyResult> {
+  const existing = await db.tutorCreditTransaction.findFirst({
+    where: { importRecordId: recordId },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, targetModel: "TutorCreditTransaction", targetId: existing.id };
+
+  const amountCents = asNumberOrNull(payload.amountCents);
+  if (amountCents == null || amountCents <= 0) return { ok: false, reason: "valor-invalido" };
+
+  const tutorName = asString(payload.tutorName) ?? "";
+  const tutorRes = await resolveTutor(db, tutorName);
+  if ("error" in tutorRes) return { ok: false, reason: tutorRes.error };
+
+  const record = await db.importRecord.findUnique({
+    where: { id: recordId },
+    select: { createdAt: true },
+  });
+  const pets = asString(payload.pets) ?? asString(payload.petName);
+  const description = pets
+    ? `Sinal em crédito - ${tutorName} / ${pets}`
+    : `Sinal em crédito - ${tutorName}`;
+
+  const transaction = await db.tutorCreditTransaction.create({
+    data: {
+      tutorId: tutorRes.id,
+      type: "CREDIT_ADDED",
+      amountCents,
+      description,
+      entryDate: record?.createdAt ?? new Date(),
+      importRecordId: recordId,
+      sourcePayload: payload as Prisma.InputJsonObject,
+    },
+    select: { id: true },
+  });
+
+  return { ok: true, targetModel: "TutorCreditTransaction", targetId: transaction.id };
+}
+
 async function applyHistoricalReservationGeneric(
   db: Db,
   recordId: string,
@@ -322,6 +540,12 @@ async function applyHistoricalReservationGeneric(
   range: [Date, Date],
   serviceFallbackName?: string,
 ): Promise<ApplyResult> {
+  const existing = await db.reservation.findFirst({
+    where: { importRecordId: recordId },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, targetModel: "Reservation", targetId: existing.id };
+
   const tutorName = asString(payload.tutorName) ?? "";
   const tutorRes = await resolveTutor(db, tutorName);
   if ("error" in tutorRes) return { ok: false, reason: tutorRes.error };
@@ -345,6 +569,15 @@ async function applyHistoricalReservationGeneric(
   if (amountCents == null) return { ok: false, reason: "valor-invalido" };
 
   const method = paymentMethodFromText(payload.payment);
+  const priceRule = await db.servicePriceRule.findFirst({
+    where: {
+      serviceTypeId: service.id,
+      isActive: true,
+      OR: [{ paymentMethod: method }, { paymentMethod: "PIX" }],
+    },
+    orderBy: [{ paymentMethod: "asc" }, { label: "asc" }],
+    select: { id: true, paymentMethod: true },
+  });
 
   const now = new Date();
   const isPast = range[1].getTime() <= now.getTime();
@@ -362,6 +595,8 @@ async function applyHistoricalReservationGeneric(
     data: {
       tutorId: tutorRes.id,
       serviceTypeId: service.id,
+      priceRuleId: priceRule?.id,
+      pricingPaymentMethod: priceRule?.paymentMethod ?? method,
       status,
       paymentStatus,
       pickupMode: "TUTOR_DROPS_OFF",
@@ -410,6 +645,7 @@ async function applyHistoricalReservationGeneric(
 
 export async function applyHistoricalReservation(db: Db, recordId: string, payload: Record<string, unknown>): Promise<ApplyResult> {
   const period = asString(payload.period) ?? "";
+  if (isClientCreditPeriod(period)) return applyClientCreditEntry(db, recordId, payload);
   const range = parseHistoricalPeriod(period);
   if (!range) return { ok: false, reason: "periodo-invalido" };
   return applyHistoricalReservationGeneric(db, recordId, payload, range);
