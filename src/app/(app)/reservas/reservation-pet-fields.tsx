@@ -1,7 +1,8 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type Tutor = { id: string; name: string; phone?: string | null; email?: string | null };
 type Pet = { id: string; name: string; tutor: { id: string; name: string } };
@@ -26,6 +27,11 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
   const [petQuery, setPetQuery] = useState("");
   const tutorBoxRef = useRef<HTMLDivElement>(null);
   const tutorHiddenRef = useRef<HTMLInputElement>(null);
+  const tutorRowRef = useRef<HTMLSpanElement>(null);
+  const tutorDropdownRef = useRef<HTMLUListElement>(null);
+  const [tutorDropdownPos, setTutorDropdownPos] = useState<
+    { top: number; left: number; width: number } | null
+  >(null);
 
   const tutorsById = useMemo(() => new Map(tutors.map((tutor) => [tutor.id, tutor])), [tutors]);
   const selectedTutor = selectedTutorId ? tutorsById.get(selectedTutorId) ?? null : null;
@@ -56,13 +62,34 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
 
   useEffect(() => {
     function onDocClick(event: MouseEvent) {
-      if (tutorBoxRef.current && !tutorBoxRef.current.contains(event.target as Node)) {
-        setTutorOpen(false);
-      }
+      const target = event.target as Node;
+      if (tutorBoxRef.current?.contains(target)) return;
+      if (tutorDropdownRef.current?.contains(target)) return;
+      setTutorOpen(false);
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!tutorOpen) {
+      setTutorDropdownPos(null);
+      return;
+    }
+    function recompute() {
+      const anchor = tutorRowRef.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      setTutorDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+    recompute();
+    window.addEventListener("scroll", recompute, true);
+    window.addEventListener("resize", recompute);
+    return () => {
+      window.removeEventListener("scroll", recompute, true);
+      window.removeEventListener("resize", recompute);
+    };
+  }, [tutorOpen]);
 
   useEffect(() => {
     if (!tutorHiddenRef.current) return;
@@ -96,7 +123,7 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
 
       <div className="field" ref={tutorBoxRef} style={{ position: "relative" }}>
         <span className="field__label">Tutor</span>
-        <span className="row" style={{ position: "relative", alignItems: "center" }}>
+        <span ref={tutorRowRef} className="row" style={{ position: "relative", alignItems: "center" }}>
           <Search style={{ position: "absolute", left: 10, width: 16, height: 16, color: "var(--muted)" }} />
           <input
             className="input"
@@ -123,58 +150,63 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
             </button>
           ) : null}
         </span>
-        {tutorOpen ? (
-          <ul
-            role="listbox"
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: 0,
-              right: 0,
-              zIndex: 10,
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              marginTop: 4,
-              maxHeight: 260,
-              overflowY: "auto",
-              listStyle: "none",
-              padding: 4,
-            }}
-          >
-            {filteredTutors.length === 0 ? (
-              <li className="muted" style={{ padding: "8px 10px", fontSize: 12 }}>
-                Nenhum tutor encontrado.
-              </li>
-            ) : (
-              filteredTutors.map((tutor) => (
-                <li key={tutor.id}>
-                  <button
-                    type="button"
-                    onClick={() => pickTutor(tutor)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      background: tutor.id === selectedTutorId ? "var(--surface-2, #f5f7fb)" : "transparent",
-                      border: 0,
-                      padding: "8px 10px",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    <strong>{tutor.name}</strong>
-                    {tutor.phone || tutor.email ? (
-                      <div className="subtle" style={{ fontSize: 11 }}>
-                        {[tutor.phone, tutor.email].filter(Boolean).join(" · ")}
-                      </div>
-                    ) : null}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        ) : null}
+        {tutorOpen && tutorDropdownPos && typeof document !== "undefined"
+          ? createPortal(
+              <ul
+                ref={tutorDropdownRef}
+                role="listbox"
+                style={{
+                  position: "fixed",
+                  top: tutorDropdownPos.top,
+                  left: tutorDropdownPos.left,
+                  width: tutorDropdownPos.width,
+                  zIndex: 1000,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  maxHeight: 260,
+                  overflowY: "auto",
+                  listStyle: "none",
+                  padding: 4,
+                  margin: 0,
+                  boxShadow: "0 12px 32px rgba(15, 23, 42, 0.18)",
+                }}
+              >
+                {filteredTutors.length === 0 ? (
+                  <li className="muted" style={{ padding: "8px 10px", fontSize: 12 }}>
+                    Nenhum tutor encontrado.
+                  </li>
+                ) : (
+                  filteredTutors.map((tutor) => (
+                    <li key={tutor.id}>
+                      <button
+                        type="button"
+                        onClick={() => pickTutor(tutor)}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          background: tutor.id === selectedTutorId ? "var(--surface-2, #f5f7fb)" : "transparent",
+                          border: 0,
+                          padding: "8px 10px",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontSize: 13,
+                        }}
+                      >
+                        <strong>{tutor.name}</strong>
+                        {tutor.phone || tutor.email ? (
+                          <div className="subtle" style={{ fontSize: 11 }}>
+                            {[tutor.phone, tutor.email].filter(Boolean).join(" · ")}
+                          </div>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>,
+              document.body,
+            )
+          : null}
       </div>
 
       <fieldset
