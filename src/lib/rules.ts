@@ -23,6 +23,28 @@ export function calculateChargeableStayUnits(startsAt: Date, endsAt: Date) {
   return Math.max(Math.ceil(diffMs / DAY_MS), 1);
 }
 
+export type ReservationDailyUnitsInput = {
+  kind?: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  visitDates?: Date[];
+};
+
+export function calculateDailyUnitsForKind(input: ReservationDailyUnitsInput) {
+  if (input.kind === "PET_SITTING") {
+    return input.visitDates?.length ?? 0;
+  }
+  if (input.kind === "DAYCARE") {
+    return 1;
+  }
+  return calculateChargeableStayUnits(input.startsAt, input.endsAt);
+}
+
+export function countHighSeasonUnitsFromDates(dates: Date[], periods: SeasonWindow[]) {
+  if (!dates.length || !periods.length) return 0;
+  return dates.filter((date) => isHighSeason(date, periods)).length;
+}
+
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }

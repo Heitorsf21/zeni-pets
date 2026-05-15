@@ -2,19 +2,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ReservationServiceOption } from "@/lib/reservation-form-options";
+import { VisitDatesField } from "./visit-dates-field";
 
 type Props = {
   serviceTypes: ReservationServiceOption[];
   formId?: string;
   defaultStartsAt?: string;
   defaultEndsAt?: string;
+  defaultVisitDates?: string[];
+  forcedKind?: string;
 };
 
-export function ReservationPeriodFields({ serviceTypes, formId, defaultStartsAt, defaultEndsAt }: Props) {
+export function ReservationPeriodFields({
+  serviceTypes,
+  formId,
+  defaultStartsAt,
+  defaultEndsAt,
+  defaultVisitDates,
+  forcedKind,
+}: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [serviceTypeId, setServiceTypeId] = useState<string>(serviceTypes[0]?.id ?? "");
 
   useEffect(() => {
+    if (forcedKind) return;
     const form = formId
       ? document.getElementById(formId)
       : rootRef.current?.closest("form");
@@ -32,27 +43,32 @@ export function ReservationPeriodFields({ serviceTypes, formId, defaultStartsAt,
       form.removeEventListener("change", sync);
       form.removeEventListener("input", sync);
     };
-  }, [formId]);
+  }, [formId, forcedKind]);
 
   const selected = serviceTypes.find((service) => service.id === serviceTypeId) ?? serviceTypes[0] ?? null;
-  const petSitting = selected?.kind === "PET_SITTING";
+  const kind = forcedKind ?? selected?.kind ?? "";
 
-  if (petSitting) {
+  if (kind === "PET_SITTING") {
+    return (
+      <div ref={rootRef} style={{ display: "contents" }}>
+        <VisitDatesField defaultDates={defaultVisitDates} />
+      </div>
+    );
+  }
+
+  if (kind === "DAYCARE") {
     return (
       <div ref={rootRef} style={{ display: "contents" }}>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Data da visita</span>
+          <span className="field__label">Data da creche</span>
           <input
             className="input"
-            name="visitDate"
+            name="startsAt"
             type="date"
             defaultValue={defaultStartsAt ?? ""}
             required
           />
         </label>
-        {/* Hidden mirror inputs so existing handlers reading startsAt still work */}
-        <input type="hidden" name="startsAt" value="" readOnly />
-        <input type="hidden" name="endsAt" value="" readOnly />
       </div>
     );
   }

@@ -83,17 +83,6 @@ export default async function EditarReservaPage({
             </div>
             <div className="card__body form-grid">
               <ServicePriceRuleFields serviceTypes={serviceOptions} />
-              <label className="field">
-                <span className="field__label">Retirada</span>
-                <select className="select" name="pickupMode" defaultValue={reservation.pickupMode}>
-                  <option value="TUTOR_DROPS_OFF">Tutor entrega em mãos</option>
-                  <option value="ZENI_PICKUP">Zeni retira na casa do cliente</option>
-                </select>
-              </label>
-              <label className="field">
-                <span className="field__label">Distância taxi pet (km)</span>
-                <input className="input" name="distanceKm" defaultValue="0" />
-              </label>
             </div>
           </div>
 
@@ -109,8 +98,22 @@ export default async function EditarReservaPage({
                 defaultEndsAt={isPetSitting ? startsValue : endsValue}
               />
               <label className="field">
-                <span className="field__label">Valor base manual</span>
-                <input className="input" name="baseAmountCents" placeholder="automático" defaultValue={centsInput(reservation.baseAmountCents)} />
+                <span className="field__label">Valor por diária (manual)</span>
+                <input className="input" name="manualDailyAmountCents" placeholder="0,00" />
+                <span className="subtle" style={{ fontSize: 11 }}>
+                  Use quando &ldquo;Valor manual por diária&rdquo; estiver selecionado. Multiplica pelo número de diárias.
+                </span>
+              </label>
+              <label className="field">
+                <span className="field__label">Valor total (manual)</span>
+                <input className="input" name="manualTotalAmountCents" placeholder="0,00" />
+                <span className="subtle" style={{ fontSize: 11 }}>
+                  Use quando &ldquo;Valor total manual&rdquo; estiver selecionado.
+                </span>
+              </label>
+              <label className="field">
+                <span className="field__label">Taxa de táxi pet (manual)</span>
+                <input className="input" name="taxiPetCents" defaultValue={centsInput(reservation.taxiPetCents)} />
               </label>
               <label className="field">
                 <span className="field__label">Desconto</span>

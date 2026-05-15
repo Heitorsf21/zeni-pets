@@ -81,7 +81,10 @@ export function calculatePriceRuleStayCents(
   return regularUnits * regularUnitCents + highUnits * highSeasonUnitCents;
 }
 
-export function calculateManualDailyBaseCents(dailyAmountCents: number, chargeableUnits: number) {
+export function calculateManualDailyBaseCents(
+  dailyAmountCents: number,
+  chargeableUnits: number,
+) {
   return Math.max(dailyAmountCents, 0) * Math.max(chargeableUnits, 1);
 }
 

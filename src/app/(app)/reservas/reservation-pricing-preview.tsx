@@ -6,17 +6,15 @@ import {
   calculateManualDailyBaseCents,
   calculatePriceRuleStayCents,
   calculatePriceRuleUnitCents,
-  hasTaxiPricing,
   selectDefaultPriceRule,
-  selectDefaultTaxiRule,
   sortPriceRules,
 } from "@/lib/pricing";
 import type { ReservationSeasonOption, ReservationServiceOption } from "@/lib/reservation-form-options";
 import {
-  calculateChargeableStayUnits,
+  calculateDailyUnitsForKind,
   countHighSeasonStayUnits,
+  countHighSeasonUnitsFromDates,
   calculateReservationTotals,
-  calculateTaxiPetCents,
 } from "@/lib/rules";
 
 type Props = {
@@ -42,16 +40,6 @@ function addOneDay(date: Date) {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + 1);
   return copy;
-}
-
-function isPetSittingService(service: { kind?: string | null } | null | undefined) {
-  return service?.kind === "PET_SITTING";
-}
-
-function parseDistanceKm(value: FormDataEntryValue | null) {
-  if (!value) return 0;
-  const parsed = Number(String(value).trim().replace(",", "."));
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function centsFromForm(formData: FormData, key: string) {
@@ -114,20 +102,42 @@ export function ReservationPricingPreview({
       rules.find((rule) => rule.id === String(formData.get("priceRuleId") ?? "")) ??
       (selectedService ? selectDefaultPriceRule(rules) : null);
 
-    const petSitting = isPetSittingService(selectedService);
+    const kind = selectedService?.kind ?? "";
+
     let startsAt: Date | null;
     let endsAtExclusive: Date | null;
-    if (petSitting) {
-      const visit = parseLocalDate(formData.get("visitDate")) ?? parseLocalDate(formData.get("startsAt"));
-      startsAt = visit;
-      endsAtExclusive = visit ? addOneDay(visit) : null;
+    let visitDates: Date[] = [];
+
+    if (kind === "PET_SITTING") {
+      const rawDates = formData.getAll("visitDates");
+      visitDates = rawDates
+        .map((value) => parseLocalDate(value))
+        .filter((date): date is Date => date != null)
+        .sort((a, b) => a.getTime() - b.getTime());
+      if (!visitDates.length) {
+        const legacy = parseLocalDate(formData.get("visitDate"));
+        if (legacy) visitDates = [legacy];
+      }
+      startsAt = visitDates[0] ?? null;
+      endsAtExclusive = visitDates.length ? addOneDay(visitDates[visitDates.length - 1]) : null;
+    } else if (kind === "DAYCARE") {
+      startsAt = parseLocalDate(formData.get("startsAt"));
+      endsAtExclusive = startsAt ? addOneDay(startsAt) : null;
     } else {
       startsAt = parseLocalDate(formData.get("startsAt"));
       endsAtExclusive = parseLocalDate(formData.get("endsAt"));
     }
+
     const petCount = formData.getAll("petIds").filter(Boolean).length;
-    const chargeableUnits = startsAt && endsAtExclusive ? calculateChargeableStayUnits(startsAt, endsAtExclusive) : 0;
-    const highSeasonUnits = startsAt && endsAtExclusive ? countHighSeasonStayUnits(startsAt, endsAtExclusive, seasons) : 0;
+    const chargeableUnits =
+      startsAt && endsAtExclusive
+        ? calculateDailyUnitsForKind({ kind, startsAt, endsAt: endsAtExclusive, visitDates })
+        : 0;
+    const highSeasonUnits = visitDates.length
+      ? countHighSeasonUnitsFromDates(visitDates, seasons)
+      : startsAt && endsAtExclusive
+        ? countHighSeasonStayUnits(startsAt, endsAtExclusive, seasons)
+        : 0;
     const hasHighSeason = highSeasonUnits > 0;
     const priceOptions = { highSeasonSurchargePercent };
     const unitBaseCents = selectedRule && petCount
@@ -139,31 +149,79 @@ export function ReservationPricingPreview({
     const automaticBaseCents = selectedRule && petCount && chargeableUnits
       ? calculatePriceRuleStayCents(selectedRule, petCount, chargeableUnits, highSeasonUnits, priceOptions)
       : 0;
-    const pricingMode = String(formData.get("pricingMode") ?? "fixed");
+    const rawMode = String(formData.get("pricingMode") ?? "fixed");
+    const pricingMode = rawMode === "manual" ? "manual_daily" : rawMode;
+
     const manualDailyRaw = String(
       formData.get("manualDailyAmountCents") ?? formData.get("baseAmountCents") ?? "",
     ).trim();
     const manualDailyCents = manualDailyRaw ? parseCurrencyToCents(manualDailyRaw) : null;
-    const manualBaseCents = manualDailyCents != null && chargeableUnits
-      ? calculateManualDailyBaseCents(manualDailyCents, chargeableUnits)
-      : null;
-    const baseAmountCents = pricingMode === "manual" && manualBaseCents != null
-      ? manualBaseCents
-      : automaticBaseCents;
-    const distanceKm = parseDistanceKm(formData.get("distanceKm"));
-    const pickupMode = String(formData.get("pickupMode") ?? "TUTOR_DROPS_OFF");
-    const taxiRule = selectedRule && hasTaxiPricing(selectedRule)
-      ? selectedRule
-      : selectDefaultTaxiRule(serviceTypes);
-    const taxiPetCents = taxiRule
-      ? calculateTaxiPetCents({
-          pickupMode: pickupMode === "ZENI_PICKUP" ? "ZENI_PICKUP" : "TUTOR_DROPS_OFF",
-          fixedFeeCents: taxiRule.fixedFeeCents ?? 0,
-          perKmCents: taxiRule.perKmCents ?? 0,
-          hygieneFeeCents: taxiRule.hygieneFeeCents ?? 0,
-          distanceKm,
-        })
+    const manualDailyBaseCents = manualDailyCents != null
+      ? calculateManualDailyBaseCents(manualDailyCents, Math.max(chargeableUnits, 1))
       : 0;
+
+    const manualTotalRaw = String(formData.get("manualTotalAmountCents") ?? "").trim();
+    const manualTotalCents = manualTotalRaw ? parseCurrencyToCents(manualTotalRaw) : null;
+
+    let baseAmountCents: number;
+    if (pricingMode === "manual_daily") {
+      baseAmountCents = manualDailyBaseCents;
+    } else if (pricingMode === "manual_total") {
+      baseAmountCents = manualTotalCents ?? 0;
+    } else {
+      baseAmountCents = automaticBaseCents;
+    }
+
+    const petIds = formData.getAll("petIds").map(String).filter(Boolean);
+    const overrides = petIds.flatMap((petId) => {
+      const enabled = formData.get(`petOverride.${petId}.enabled`);
+      if (!enabled) return [];
+      const rawOverrideMode = String(formData.get(`petOverride.${petId}.pricingMode`) ?? "fixed");
+      const mode = rawOverrideMode === "manual_daily" || rawOverrideMode === "manual_total" ? rawOverrideMode : "fixed";
+      const serviceTypeId = String(formData.get(`petOverride.${petId}.serviceTypeId`) ?? "");
+      const priceRuleId = String(formData.get(`petOverride.${petId}.priceRuleId`) ?? "");
+      const dailyRaw = String(formData.get(`petOverride.${petId}.manualDailyCents`) ?? "").trim();
+      const totalRaw = String(formData.get(`petOverride.${petId}.manualTotalCents`) ?? "").trim();
+      const dailyCents = dailyRaw ? parseCurrencyToCents(dailyRaw) : null;
+      const totalCents = totalRaw ? parseCurrencyToCents(totalRaw) : null;
+
+      let cents = 0;
+      if (mode === "manual_total") {
+        cents = Math.max(totalCents ?? 0, 0);
+      } else if (mode === "manual_daily" && dailyCents != null) {
+        cents = calculateManualDailyBaseCents(dailyCents, Math.max(chargeableUnits, 1));
+      } else if (mode === "fixed" && priceRuleId) {
+        const overrideService = serviceTypes.find((s) => s.id === serviceTypeId) ?? null;
+        const overrideRule = overrideService?.priceRules.find((r) => r.id === priceRuleId) ?? null;
+        if (overrideRule) {
+          cents = calculatePriceRuleStayCents(
+            overrideRule,
+            1,
+            Math.max(chargeableUnits, 1),
+            highSeasonUnits,
+            priceOptions,
+          );
+        }
+      }
+      return [{ petId, cents }];
+    });
+
+    if (overrides.length > 0 && selectedRule) {
+      const soloFirstPet = calculatePriceRuleStayCents(
+        selectedRule,
+        1,
+        Math.max(chargeableUnits, 1),
+        highSeasonUnits,
+        priceOptions,
+      );
+      baseAmountCents = petIds.reduce((sum, petId) => {
+        const override = overrides.find((o) => o.petId === petId);
+        if (override) return sum + override.cents;
+        return sum + soloFirstPet;
+      }, 0);
+    }
+
+    const taxiPetCents = centsFromForm(formData, "taxiPetCents");
     const discountCents = centsFromForm(formData, "discountCents");
     const additionalCents = centsFromForm(formData, "additionalCents");
     const totals = calculateReservationTotals({
@@ -177,7 +235,9 @@ export function ReservationPricingPreview({
     return {
       selectedService,
       selectedRule,
+      kind,
       petCount,
+      visitDates,
       chargeableUnits,
       highSeasonUnits,
       hasHighSeason,
@@ -185,10 +245,10 @@ export function ReservationPricingPreview({
       highSeasonUnitBaseCents,
       automaticBaseCents,
       manualDailyCents,
-      manualBaseCents,
+      manualDailyBaseCents,
+      manualTotalCents,
       baseAmountCents,
       pricingMode,
-      taxiRule,
       taxiPetCents,
       discountCents,
       additionalCents,
@@ -216,33 +276,47 @@ export function ReservationPricingPreview({
         </div>
         <div className="row row--between">
           <span className="muted">Modo</span>
-          <strong>{summary.pricingMode === "manual" ? "Diaria manual" : "Valor fixado"}</strong>
+          <strong>
+            {summary.pricingMode === "manual_daily"
+              ? "Manual por diária"
+              : summary.pricingMode === "manual_total"
+                ? "Total manual"
+                : "Valor da tabela"}
+          </strong>
         </div>
         <div className="row row--between">
           <span className="muted">Pets</span>
           <strong>{summary.petCount || "-"}</strong>
         </div>
         <div className="row row--between">
-          <span className="muted">Diárias</span>
+          <span className="muted">{summary.kind === "PET_SITTING" ? "Visitas" : "Diárias"}</span>
           <strong>{summary.chargeableUnits || "-"}</strong>
         </div>
-        <div className="row row--between">
-          <span className="muted">Base por diaria</span>
-          <span>{brl(summary.unitBaseCents)}</span>
-        </div>
+        {summary.pricingMode === "fixed" ? (
+          <div className="row row--between">
+            <span className="muted">Base por diária</span>
+            <span>{brl(summary.unitBaseCents)}</span>
+          </div>
+        ) : null}
         {summary.hasHighSeason ? (
           <div className="row row--between">
             <span className="muted">Alta temporada</span>
             <span>
-              {summary.highSeasonUnits} diaria{summary.highSeasonUnits === 1 ? "" : "s"}
-              {summary.pricingMode === "fixed" ? ` - ${brl(summary.highSeasonUnitBaseCents)}/dia` : ""}
+              {summary.highSeasonUnits} {summary.highSeasonUnits === 1 ? "diária" : "diárias"}
+              {summary.pricingMode === "fixed" ? ` · ${brl(summary.highSeasonUnitBaseCents)}/dia` : ""}
             </span>
           </div>
         ) : null}
-        {summary.pricingMode === "manual" ? (
+        {summary.pricingMode === "manual_daily" ? (
           <div className="row row--between">
-            <span className="muted">Diaria manual</span>
-            <span>{summary.manualDailyCents != null ? brl(summary.manualDailyCents) : "-"}</span>
+            <span className="muted">Diária manual</span>
+            <span>{summary.manualDailyCents != null ? brl(summary.manualDailyCents) : brl(0)}</span>
+          </div>
+        ) : null}
+        {summary.pricingMode === "manual_total" ? (
+          <div className="row row--between">
+            <span className="muted">Total manual</span>
+            <span>{summary.manualTotalCents != null ? brl(summary.manualTotalCents) : brl(0)}</span>
           </div>
         ) : null}
         <div className="row row--between">
@@ -250,7 +324,7 @@ export function ReservationPricingPreview({
           <strong>{brl(summary.baseAmountCents)}</strong>
         </div>
         <div className="row row--between">
-          <span className="muted">Taxi pet</span>
+          <span className="muted">Taxa de táxi</span>
           <strong>{brl(summary.taxiPetCents)}</strong>
         </div>
         {summary.discountCents || summary.additionalCents ? (

@@ -11,16 +11,14 @@ import { addDays, parseDateOnly } from "@/lib/date";
 import {
   calculateManualDailyBaseCents,
   calculatePriceRuleStayCents,
-  hasTaxiPricing,
   selectDefaultPriceRule,
-  selectDefaultTaxiRule,
 } from "@/lib/pricing";
 import { deriveInitialReservationStatus, derivePaymentStatus, sumPaidCents } from "@/lib/reservation-status";
 import {
-  calculateChargeableStayUnits,
+  calculateDailyUnitsForKind,
   countHighSeasonStayUnits,
+  countHighSeasonUnitsFromDates,
   calculateReservationTotals,
-  calculateTaxiPetCents,
 } from "@/lib/rules";
 import { generateTaskOccurrenceDates } from "@/lib/tasks";
 
@@ -38,9 +36,10 @@ async function calculateBaseAmount(input: {
   petCount: number;
   startsAt: Date;
   endsAt: Date;
+  visitDates?: Date[];
 }) {
   const prisma = getPrisma();
-  const [serviceType, taxiServiceTypes, seasons, settings] = await Promise.all([
+  const [serviceType, seasons, settings] = await Promise.all([
     prisma.serviceType.findUnique({
       where: { id: input.serviceTypeId ?? "" },
       include: {
@@ -49,33 +48,6 @@ async function calculateBaseAmount(input: {
           orderBy: [{ paymentMethod: "asc" }, { label: "asc" }],
         },
       },
-    }),
-    prisma.serviceType.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { kind: "TAXI_PET" },
-          {
-            priceRules: {
-              some: {
-                isActive: true,
-                OR: [
-                  { fixedFeeCents: { not: null } },
-                  { perKmCents: { not: null } },
-                  { hygieneFeeCents: { not: null } },
-                ],
-              },
-            },
-          },
-        ],
-      },
-      include: {
-        priceRules: {
-          where: { isActive: true },
-          orderBy: [{ paymentMethod: "asc" }, { label: "asc" }],
-        },
-      },
-      orderBy: { name: "asc" },
     }),
     prisma.seasonPeriod.findMany({ where: { isActive: true } }),
     prisma.businessSettings.findUnique({ where: { singletonKey: "default" } }),
@@ -106,43 +78,67 @@ async function calculateBaseAmount(input: {
   }
 
   const rule = ruleFromDirectSelection ?? selectDefaultPriceRule(serviceType?.priceRules ?? []);
-  if (!rule) return { ok: false as const, reason: "preco-nao-configurado" };
 
-  const chargeableUnits = calculateChargeableStayUnits(input.startsAt, input.endsAt);
-  const highSeasonUnits = countHighSeasonStayUnits(input.startsAt, input.endsAt, seasons);
+  const chargeableUnits = calculateDailyUnitsForKind({
+    kind: selectedService.kind,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    visitDates: input.visitDates,
+  });
+
+  const highSeasonUnits = input.visitDates?.length
+    ? countHighSeasonUnitsFromDates(input.visitDates, seasons)
+    : countHighSeasonStayUnits(input.startsAt, input.endsAt, seasons);
   const highSeasonSurchargePercent = settings?.highSeasonSurchargePercent ?? 0;
 
   return {
     ok: true as const,
     serviceTypeId: selectedService.id,
+    serviceKind: selectedService.kind,
     priceRule: rule,
-    pricingPaymentMethod: rule.paymentMethod,
+    pricingPaymentMethod: rule?.paymentMethod ?? null,
     chargeableUnits,
     highSeasonUnits,
-    baseAmountCents: calculatePriceRuleStayCents(
-      rule,
-      input.petCount,
-      chargeableUnits,
-      highSeasonUnits,
-      { highSeasonSurchargePercent },
-    ),
-    taxiRule: hasTaxiPricing(rule) ? rule : selectDefaultTaxiRule(taxiServiceTypes),
+    baseAmountCents: rule
+      ? calculatePriceRuleStayCents(
+          rule,
+          input.petCount,
+          chargeableUnits,
+          highSeasonUnits,
+          { highSeasonSurchargePercent },
+        )
+      : 0,
     settings,
   };
-}
-
-function distanceKmField(formData: FormData, key: string) {
-  const raw = stringField(formData, key);
-  if (!raw) return 0;
-
-  const parsed = Number(raw.replace(",", "."));
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function optionalStringFromValue(value: FormDataEntryValue | undefined) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function resolveBaseAmountCents(formData: FormData, options: {
+  automaticBaseCents: number;
+  chargeableUnits: number;
+}): { ok: true; cents: number } | { ok: false; reason: string } {
+  const rawMode = stringField(formData, "pricingMode");
+  const mode = rawMode === "manual" ? "manual_daily" : rawMode;
+
+  if (mode === "manual_total") {
+    const total = centsFieldStrict(formData, "manualTotalAmountCents");
+    if (total == null) return { ok: false, reason: "valor-total-manual-invalido" };
+    return { ok: true, cents: Math.max(total, 0) };
+  }
+
+  if (mode === "manual_daily") {
+    const daily = centsFieldStrict(formData, "manualDailyAmountCents")
+      ?? centsFieldStrict(formData, "baseAmountCents");
+    if (daily == null) return { ok: true, cents: 0 };
+    return { ok: true, cents: calculateManualDailyBaseCents(daily, options.chargeableUnits) };
+  }
+
+  return { ok: true, cents: options.automaticBaseCents };
 }
 
 function reservationTaskDrafts(formData: FormData, input: {
@@ -183,17 +179,113 @@ function reservationTaskDrafts(formData: FormData, input: {
   });
 }
 
-function parseReservationPeriod(formData: FormData): { startsAt: Date | null; endsAt: Date | null } {
-  const visitRaw = stringField(formData, "visitDate");
-  if (visitRaw) {
-    const visit = parseDateOnly(visitRaw);
-    if (!visit) return { startsAt: null, endsAt: null };
-    return { startsAt: visit, endsAt: addDays(visit, 1) };
+type ParsedReservationPeriod = {
+  startsAt: Date | null;
+  endsAt: Date | null;
+  visitDates: Date[];
+};
+
+function parseReservationPeriod(formData: FormData, kind: string | null): ParsedReservationPeriod {
+  if (kind === "PET_SITTING") {
+    const rawDates = formData.getAll("visitDates");
+    const dates = rawDates
+      .map((value) => parseDateOnly(value))
+      .filter((date): date is Date => date != null)
+      .sort((a, b) => a.getTime() - b.getTime());
+    if (!dates.length) {
+      const legacyVisit = parseDateOnly(formData.get("visitDate"));
+      if (legacyVisit) dates.push(legacyVisit);
+    }
+    if (!dates.length) return { startsAt: null, endsAt: null, visitDates: [] };
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    return { startsAt: first, endsAt: addDays(last, 1), visitDates: dates };
   }
+
+  if (kind === "DAYCARE") {
+    const start = parseDateOnly(formData.get("startsAt"));
+    if (!start) return { startsAt: null, endsAt: null, visitDates: [] };
+    return { startsAt: start, endsAt: addDays(start, 1), visitDates: [] };
+  }
+
   const start = parseDateOnly(formData.get("startsAt"));
   const end = parseDateOnly(formData.get("endsAt"));
-  if (!start || !end) return { startsAt: null, endsAt: null };
-  return { startsAt: start, endsAt: end };
+  if (!start || !end) return { startsAt: null, endsAt: null, visitDates: [] };
+  return { startsAt: start, endsAt: end, visitDates: [] };
+}
+
+type PetOverride = {
+  petId: string;
+  serviceTypeId: string | null;
+  priceRuleId: string | null;
+  pricingMode: "fixed" | "manual_daily" | "manual_total";
+  manualDailyCents: number | null;
+  manualTotalCents: number | null;
+};
+
+function extractPetOverrides(formData: FormData, petIds: string[]): PetOverride[] {
+  return petIds.flatMap((petId) => {
+    const enabled = formData.get(`petOverride.${petId}.enabled`);
+    if (!enabled) return [];
+    const rawMode = String(formData.get(`petOverride.${petId}.pricingMode`) ?? "fixed");
+    const pricingMode: PetOverride["pricingMode"] =
+      rawMode === "manual_daily" || rawMode === "manual_total" ? rawMode : "fixed";
+    const serviceTypeId = stringField(formData, `petOverride.${petId}.serviceTypeId`) || null;
+    const priceRuleId = stringField(formData, `petOverride.${petId}.priceRuleId`) || null;
+    const manualDailyCents = pricingMode === "manual_daily"
+      ? centsFieldStrict(formData, `petOverride.${petId}.manualDailyCents`)
+      : null;
+    const manualTotalCents = pricingMode === "manual_total"
+      ? centsFieldStrict(formData, `petOverride.${petId}.manualTotalCents`)
+      : null;
+    return [{
+      petId,
+      serviceTypeId,
+      priceRuleId,
+      pricingMode,
+      manualDailyCents,
+      manualTotalCents,
+    }];
+  });
+}
+
+async function calculatePetOverrideBase(
+  override: PetOverride,
+  options: { chargeableUnits: number; highSeasonUnits: number; highSeasonSurchargePercent: number },
+): Promise<number> {
+  if (override.pricingMode === "manual_total") {
+    return Math.max(override.manualTotalCents ?? 0, 0);
+  }
+  if (override.pricingMode === "manual_daily") {
+    if (override.manualDailyCents == null) return 0;
+    return calculateManualDailyBaseCents(override.manualDailyCents, options.chargeableUnits);
+  }
+  if (!override.priceRuleId) return 0;
+  const rule = await getPrisma().servicePriceRule.findUnique({ where: { id: override.priceRuleId } });
+  if (!rule) return 0;
+  return calculatePriceRuleStayCents(rule, 1, options.chargeableUnits, options.highSeasonUnits, {
+    highSeasonSurchargePercent: options.highSeasonSurchargePercent,
+  });
+}
+
+async function resolveServiceKind(serviceTypeId: string | null, priceRuleId: string | null): Promise<string | null> {
+  if (!serviceTypeId && !priceRuleId) return null;
+  const prisma = getPrisma();
+  if (serviceTypeId) {
+    const service = await prisma.serviceType.findUnique({
+      where: { id: serviceTypeId },
+      select: { kind: true },
+    });
+    if (service) return service.kind;
+  }
+  if (priceRuleId) {
+    const rule = await prisma.servicePriceRule.findUnique({
+      where: { id: priceRuleId },
+      select: { serviceType: { select: { kind: true } } },
+    });
+    return rule?.serviceType.kind ?? null;
+  }
+  return null;
 }
 
 export async function createReservationAction(formData: FormData) {
@@ -202,12 +294,17 @@ export async function createReservationAction(formData: FormData) {
   const serviceTypeId = stringField(formData, "serviceTypeId");
   const priceRuleId = stringField(formData, "priceRuleId");
   const petIds = Array.from(new Set(selectedValues(formData, "petIds")));
-  const { startsAt, endsAt } = parseReservationPeriod(formData);
+  const kind = await resolveServiceKind(serviceTypeId, priceRuleId);
+  const { startsAt, endsAt, visitDates } = parseReservationPeriod(formData, kind);
 
   if (!tutorId || (!serviceTypeId && !priceRuleId) || !petIds.length || !startsAt || !endsAt) {
     redirect("/nova-reserva?error=dados-obrigatorios");
   }
-  if (endsAt.getTime() <= startsAt.getTime()) {
+  if (kind === "PET_SITTING") {
+    if (!visitDates.length) redirect("/nova-reserva?error=datas-visita-obrigatorias");
+  } else if (kind === "DAYCARE") {
+    // Single-day daycare: startsAt/endsAt cover the same calendar day.
+  } else if (endsAt.getTime() <= startsAt.getTime()) {
     redirect("/nova-reserva?error=datas-invalidas");
   }
 
@@ -221,42 +318,49 @@ export async function createReservationAction(formData: FormData) {
     redirect("/nova-reserva?error=pets-do-tutor");
   }
 
-  const pickupMode = stringField(formData, "pickupMode") === "ZENI_PICKUP"
-    ? "ZENI_PICKUP"
-    : "TUTOR_DROPS_OFF";
   const base = await calculateBaseAmount({
     serviceTypeId,
     priceRuleId,
     petCount: petIds.length,
     startsAt,
     endsAt,
+    visitDates,
   });
   if (!base.ok) redirect(`/nova-reserva?error=${base.reason}`);
 
-  const distanceKm = distanceKmField(formData, "distanceKm");
-  if (distanceKm == null) {
-    redirect("/nova-reserva?error=distancia-invalida");
+  const taxiPetCents = centsField(formData, "taxiPetCents", 0);
+
+  const overrides = extractPetOverrides(formData, petIds);
+  const overrideByPetId = new Map(overrides.map((override) => [override.petId, override]));
+
+  const resolvedBase = resolveBaseAmountCents(formData, {
+    automaticBaseCents: base.baseAmountCents,
+    chargeableUnits: base.chargeableUnits,
+  });
+  if (!resolvedBase.ok) redirect(`/nova-reserva?error=${resolvedBase.reason}`);
+  const baseFromMain = resolvedBase.cents;
+
+  const highSeasonSurchargePercent = base.settings?.highSeasonSurchargePercent ?? 0;
+  const overrideCents = new Map<string, number>();
+  for (const override of overrides) {
+    const cents = await calculatePetOverrideBase(override, {
+      chargeableUnits: base.chargeableUnits,
+      highSeasonUnits: base.highSeasonUnits,
+      highSeasonSurchargePercent,
+    });
+    overrideCents.set(override.petId, cents);
   }
 
-  const taxiPetCents = calculateTaxiPetCents({
-    pickupMode,
-    fixedFeeCents: base.taxiRule?.fixedFeeCents ?? 0,
-    perKmCents: base.taxiRule?.perKmCents ?? 0,
-    hygieneFeeCents: base.taxiRule?.hygieneFeeCents ?? 0,
-    distanceKm,
-  });
-
-  const pricingMode = stringField(formData, "pricingMode");
-  const manualDailyRaw = stringField(formData, "manualDailyAmountCents") || stringField(formData, "baseAmountCents");
-  const useManualPricing = pricingMode === "manual" || (!pricingMode && Boolean(manualDailyRaw));
-  const manualDailyCents = manualDailyRaw ? centsFieldStrict(formData, "manualDailyAmountCents") ?? centsFieldStrict(formData, "baseAmountCents") : null;
-  const baseAmountCents = useManualPricing
-    ? manualDailyCents == null
-      ? null
-      : calculateManualDailyBaseCents(manualDailyCents, base.chargeableUnits)
-    : base.baseAmountCents;
-  if (baseAmountCents == null) {
-    redirect("/nova-reserva?error=valor-diaria-manual-invalido");
+  let baseAmountCents = baseFromMain;
+  if (overrides.length > 0 && base.priceRule) {
+    const soloFirstPet = calculatePriceRuleStayCents(base.priceRule, 1, base.chargeableUnits, base.highSeasonUnits, {
+      highSeasonSurchargePercent,
+    });
+    baseAmountCents = petIds.reduce((sum, petId) => {
+      const override = overrideByPetId.get(petId);
+      if (override) return sum + (overrideCents.get(petId) ?? 0);
+      return sum + soloFirstPet;
+    }, 0);
   }
 
   const discountCents = centsField(formData, "discountCents", 0);
@@ -277,11 +381,10 @@ export async function createReservationAction(formData: FormData) {
       data: {
         tutorId,
         serviceTypeId: base.serviceTypeId,
-        priceRuleId: base.priceRule.id,
+        priceRuleId: base.priceRule?.id ?? null,
         pricingPaymentMethod: base.pricingPaymentMethod,
         status: initialStatus,
         paymentStatus: "PENDING",
-        pickupMode,
         startsAt,
         endsAt,
         notes: optionalStringField(formData, "notes"),
@@ -295,11 +398,27 @@ export async function createReservationAction(formData: FormData) {
         depositDueCents: totals.depositDueCents,
         balanceDueCents: totals.balanceDueCents,
         reservationPets: {
-          create: petIds.map((petId, index) => ({
-            petId,
-            priceRole: index === 0 ? "first_pet" : "additional_pet",
-          })),
+          create: petIds.map((petId, index) => {
+            const override = overrideByPetId.get(petId);
+            return {
+              petId,
+              priceRole: index === 0 ? "first_pet" : "additional_pet",
+              serviceTypeId: override?.serviceTypeId ?? null,
+              priceRuleId: override?.priceRuleId ?? null,
+              pricingMode: override?.pricingMode ?? null,
+              manualDailyCents: override?.manualDailyCents ?? null,
+              manualTotalCents: override?.manualTotalCents ?? null,
+              baseAmountCents: override ? overrideCents.get(petId) ?? 0 : 0,
+            };
+          }),
         },
+        ...(visitDates.length
+          ? {
+              visitDates: {
+                create: visitDates.map((date) => ({ date })),
+              },
+            }
+          : {}),
       },
       include: { tutor: true, serviceType: true, reservationPets: { include: { pet: true } } },
     });
@@ -381,12 +500,17 @@ export async function updateReservationAction(id: string, formData: FormData) {
   const serviceTypeId = stringField(formData, "serviceTypeId");
   const priceRuleId = stringField(formData, "priceRuleId");
   const petIds = Array.from(new Set(selectedValues(formData, "petIds")));
-  const { startsAt, endsAt } = parseReservationPeriod(formData);
+  const kind = await resolveServiceKind(serviceTypeId, priceRuleId);
+  const { startsAt, endsAt, visitDates } = parseReservationPeriod(formData, kind);
 
   if (!tutorId || (!serviceTypeId && !priceRuleId) || !petIds.length || !startsAt || !endsAt) {
     redirect(`/reservas/${id}/editar?error=dados-obrigatorios`);
   }
-  if (endsAt.getTime() <= startsAt.getTime()) {
+  if (kind === "PET_SITTING") {
+    if (!visitDates.length) redirect(`/reservas/${id}/editar?error=datas-visita-obrigatorias`);
+  } else if (kind === "DAYCARE") {
+    // Single-day daycare allowed.
+  } else if (endsAt.getTime() <= startsAt.getTime()) {
     redirect(`/reservas/${id}/editar?error=datas-invalidas`);
   }
 
@@ -398,42 +522,49 @@ export async function updateReservationAction(id: string, formData: FormData) {
     redirect(`/reservas/${id}/editar?error=pets-do-tutor`);
   }
 
-  const pickupMode = stringField(formData, "pickupMode") === "ZENI_PICKUP" ? "ZENI_PICKUP" : "TUTOR_DROPS_OFF";
   const base = await calculateBaseAmount({
     serviceTypeId,
     priceRuleId,
     petCount: petIds.length,
     startsAt,
     endsAt,
+    visitDates,
   });
   if (!base.ok) redirect(`/reservas/${id}/editar?error=${base.reason}`);
 
-  const distanceKm = distanceKmField(formData, "distanceKm");
-  if (distanceKm == null) {
-    redirect(`/reservas/${id}/editar?error=distancia-invalida`);
+  const taxiPetCents = centsField(formData, "taxiPetCents", 0);
+
+  const overridesUpdate = extractPetOverrides(formData, petIds);
+  const overrideByPetIdUpdate = new Map(overridesUpdate.map((override) => [override.petId, override]));
+
+  const resolvedBase = resolveBaseAmountCents(formData, {
+    automaticBaseCents: base.baseAmountCents,
+    chargeableUnits: base.chargeableUnits,
+  });
+  if (!resolvedBase.ok) redirect(`/reservas/${id}/editar?error=${resolvedBase.reason}`);
+  const baseFromMainUpdate = resolvedBase.cents;
+
+  const highSeasonSurchargePercentUpdate = base.settings?.highSeasonSurchargePercent ?? 0;
+  const overrideCentsUpdate = new Map<string, number>();
+  for (const override of overridesUpdate) {
+    const cents = await calculatePetOverrideBase(override, {
+      chargeableUnits: base.chargeableUnits,
+      highSeasonUnits: base.highSeasonUnits,
+      highSeasonSurchargePercent: highSeasonSurchargePercentUpdate,
+    });
+    overrideCentsUpdate.set(override.petId, cents);
   }
 
-  const taxiPetCents = calculateTaxiPetCents({
-    pickupMode,
-    fixedFeeCents: base.taxiRule?.fixedFeeCents ?? 0,
-    perKmCents: base.taxiRule?.perKmCents ?? 0,
-    hygieneFeeCents: base.taxiRule?.hygieneFeeCents ?? 0,
-    distanceKm,
-  });
-
-  const pricingMode = stringField(formData, "pricingMode");
-  const manualDailyRaw = stringField(formData, "manualDailyAmountCents") || stringField(formData, "baseAmountCents");
-  const useManualPricing = pricingMode === "manual" || (!pricingMode && Boolean(manualDailyRaw));
-  const manualDailyCents = manualDailyRaw
-    ? centsFieldStrict(formData, "manualDailyAmountCents") ?? centsFieldStrict(formData, "baseAmountCents")
-    : null;
-  const baseAmountCents = useManualPricing
-    ? manualDailyCents == null
-      ? null
-      : calculateManualDailyBaseCents(manualDailyCents, base.chargeableUnits)
-    : base.baseAmountCents;
-  if (baseAmountCents == null) {
-    redirect(`/reservas/${id}/editar?error=valor-diaria-manual-invalido`);
+  let baseAmountCents = baseFromMainUpdate;
+  if (overridesUpdate.length > 0 && base.priceRule) {
+    const soloFirstPet = calculatePriceRuleStayCents(base.priceRule, 1, base.chargeableUnits, base.highSeasonUnits, {
+      highSeasonSurchargePercent: highSeasonSurchargePercentUpdate,
+    });
+    baseAmountCents = petIds.reduce((sum, petId) => {
+      const override = overrideByPetIdUpdate.get(petId);
+      if (override) return sum + (overrideCentsUpdate.get(petId) ?? 0);
+      return sum + soloFirstPet;
+    }, 0);
   }
 
   const discountCents = centsField(formData, "discountCents", 0);
@@ -463,9 +594,8 @@ export async function updateReservationAction(id: string, formData: FormData) {
       data: {
         tutorId,
         serviceTypeId: base.serviceTypeId,
-        priceRuleId: base.priceRule.id,
+        priceRuleId: base.priceRule?.id ?? null,
         pricingPaymentMethod: base.pricingPaymentMethod,
-        pickupMode,
         startsAt,
         endsAt,
         notes: optionalStringField(formData, "notes"),
@@ -495,12 +625,32 @@ export async function updateReservationAction(id: string, formData: FormData) {
         skipDuplicates: true,
       });
     }
-    // Reassign priceRole based on the new selection order so the first pet is always "first_pet".
+    // Reassign priceRole + reaply overrides for every pet (including the ones that have no override → clear fields).
     for (let index = 0; index < petIds.length; index++) {
+      const petId = petIds[index];
+      const override = overrideByPetIdUpdate.get(petId);
       await tx.reservationPet.updateMany({
-        where: { reservationId: id, petId: petIds[index] },
-        data: { priceRole: index === 0 ? "first_pet" : "additional_pet" },
+        where: { reservationId: id, petId },
+        data: {
+          priceRole: index === 0 ? "first_pet" : "additional_pet",
+          serviceTypeId: override?.serviceTypeId ?? null,
+          priceRuleId: override?.priceRuleId ?? null,
+          pricingMode: override?.pricingMode ?? null,
+          manualDailyCents: override?.manualDailyCents ?? null,
+          manualTotalCents: override?.manualTotalCents ?? null,
+          baseAmountCents: override ? overrideCentsUpdate.get(petId) ?? 0 : 0,
+        },
       });
+    }
+
+    if (kind === "PET_SITTING") {
+      await tx.reservationVisitDate.deleteMany({ where: { reservationId: id } });
+      if (visitDates.length) {
+        await tx.reservationVisitDate.createMany({
+          data: visitDates.map((date) => ({ reservationId: id, date })),
+          skipDuplicates: true,
+        });
+      }
     }
   });
 
