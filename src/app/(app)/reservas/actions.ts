@@ -191,9 +191,9 @@ function parseReservationPeriod(formData: FormData): { startsAt: Date | null; en
     return { startsAt: visit, endsAt: addDays(visit, 1) };
   }
   const start = parseDateOnly(formData.get("startsAt"));
-  const endInclusive = parseDateOnly(formData.get("endsAt"));
-  if (!start || !endInclusive) return { startsAt: null, endsAt: null };
-  return { startsAt: start, endsAt: addDays(endInclusive, 1) };
+  const end = parseDateOnly(formData.get("endsAt"));
+  if (!start || !end) return { startsAt: null, endsAt: null };
+  return { startsAt: start, endsAt: end };
 }
 
 export async function createReservationAction(formData: FormData) {
