@@ -1636,12 +1636,13 @@ a.tab:hover {
 }
 
 .cal__day {
-  min-height: 126px;
+  min-height: 140px;
   padding: 10px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
   position: relative;
+  overflow: hidden;
 }
 
 .cal__day--empty {
@@ -1694,21 +1695,41 @@ a.tab:hover {
   font-size: 11px;
   font-weight: 500;
   margin-top: 5px;
-  background: var(--teal-tile);
-  color: var(--teal-600);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cal__chip--lilac {
-  background: var(--lilac-tile);
-  color: var(--lilac-500);
+.cal__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
 }
 
-.cal__chip--warm {
-  background: var(--warm-tile);
-  color: var(--warm-500);
+.cal__bar {
+  display: block;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.cal__bar:hover {
+  filter: brightness(0.95);
+}
+
+.cal__more {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 0 6px;
+  margin-top: 2px;
 }
 
 .login {

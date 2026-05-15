@@ -11,7 +11,6 @@ import {
   endOfMonth,
   formatDateShort,
   formatDateOnly,
-  formatDateTimeShort,
   formatReservationPeriod,
   reservationEndDay,
   startOfDay,
@@ -238,6 +237,7 @@ export async function getReservationsByMonthData(year: number, month: number) {
           { startsAt: { gte: start, lt: end } },
           { endsAt: { gt: start, lte: end } },
           { AND: [{ startsAt: { lt: start } }, { endsAt: { gt: end } }] },
+          { visitDates: { some: { date: { gte: start, lt: end } } } },
         ],
       },
       orderBy: { startsAt: "asc" },
@@ -246,20 +246,77 @@ export async function getReservationsByMonthData(year: number, month: number) {
         serviceType: true,
         reservationPets: { include: { pet: true } },
         payments: true,
+        visitDates: true,
       },
     });
-    return reservations.map((reservation) => ({
-      id: reservation.id,
-      tutor: reservation.tutor.name,
-      type: reservation.serviceType.name,
-      pets: reservation.reservationPets.map((item) => item.pet.name).join(", "),
-      period: formatReservationPeriod(reservation.startsAt, reservation.endsAt),
-      status: reservation.status,
-      payment: reservation.paymentStatus,
-      value: brl(reservation.totalCents),
-      startsAt: reservation.startsAt,
-      endsAt: reservation.endsAt,
-    }));
+
+    const toDayKey = (date: Date) => {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    };
+
+    return reservations.map((reservation) => {
+      const isPetSitting = reservation.serviceType.kind === "PET_SITTING";
+      const days: Array<{ date: string }> = [];
+
+      if (isPetSitting) {
+        const visitDates = (reservation.visitDates ?? [])
+          .map((entry) => entry.date)
+          .filter((date) => date >= start && date < end)
+          .sort((a, b) => a.getTime() - b.getTime());
+        for (const date of visitDates) {
+          days.push({ date: toDayKey(date) });
+        }
+      } else {
+        const firstDay = new Date(
+          reservation.startsAt.getFullYear(),
+          reservation.startsAt.getMonth(),
+          reservation.startsAt.getDate(),
+        );
+        const lastDayExclusive = new Date(
+          reservation.endsAt.getFullYear(),
+          reservation.endsAt.getMonth(),
+          reservation.endsAt.getDate(),
+        );
+        // If endsAt has time-of-day past 00:00, include that day too
+        if (
+          reservation.endsAt.getHours() !== 0
+          || reservation.endsAt.getMinutes() !== 0
+          || reservation.endsAt.getSeconds() !== 0
+          || reservation.endsAt.getMilliseconds() !== 0
+        ) {
+          lastDayExclusive.setDate(lastDayExclusive.getDate() + 1);
+        }
+        const cursor = new Date(firstDay);
+        while (cursor < lastDayExclusive) {
+          if (cursor >= start && cursor < end) {
+            days.push({ date: toDayKey(cursor) });
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+
+      const spansMultipleDays = isPetSitting
+        ? days.length > 1
+        : (reservation.endsAt.getTime() - reservation.startsAt.getTime()) > 24 * 60 * 60 * 1000;
+
+      return {
+        id: reservation.id,
+        tutor: reservation.tutor.name,
+        type: reservation.serviceType.name,
+        serviceColor: reservation.serviceType.color ?? "#1f6b6f",
+        serviceKind: reservation.serviceType.kind,
+        pets: reservation.reservationPets.map((item) => item.pet.name).join(", "),
+        period: formatReservationPeriod(reservation.startsAt, reservation.endsAt),
+        status: reservation.status,
+        payment: reservation.paymentStatus,
+        value: brl(reservation.totalCents),
+        startsAt: reservation.startsAt,
+        endsAt: reservation.endsAt,
+        days,
+        spansMultipleDays,
+      };
+    });
   } catch (error) {
     dbUnavailable("reservations by month", error);
     return [];

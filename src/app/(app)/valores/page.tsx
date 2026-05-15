@@ -4,6 +4,7 @@ import { FlashMessage } from "@/components/ui/flash-message";
 import { ConfirmForm } from "@/components/ui/confirm-form";
 import { getPrisma } from "@/lib/db";
 import { brl } from "@/lib/money";
+import { contrastingTextColor } from "@/lib/colors";
 import {
   createPriceRuleAction,
   createServiceTypeAction,
@@ -76,6 +77,10 @@ export default async function ValoresPage({
                 ))}
               </select>
             </label>
+            <label className="field">
+              <span className="field__label">Cor na agenda</span>
+              <input className="input" type="color" name="color" defaultValue="#1f6b6f" style={{ minHeight: 38, padding: 4 }} />
+            </label>
             <label className="field" style={{ gridColumn: "1 / -1" }}>
               <span className="field__label">Descrição</span>
               <input className="input" name="description" />
@@ -86,11 +91,31 @@ export default async function ValoresPage({
           </form>
         </section>
 
-        {services.map((service) => (
+        {services.map((service) => {
+          const serviceColor = service.color ?? "#1f6b6f";
+          return (
           <section className="card" key={service.id}>
             <div className="card__header">
               <div>
-                <div className="card__title"><DollarSign /> {service.name}</div>
+                <div className="card__title">
+                  <DollarSign /> {service.name}
+                  <span
+                    aria-label={`Cor na agenda: ${serviceColor}`}
+                    title={`Cor na agenda: ${serviceColor}`}
+                    style={{
+                      display: "inline-block",
+                      padding: "2px 8px",
+                      borderRadius: "var(--r-sm)",
+                      backgroundColor: serviceColor,
+                      color: contrastingTextColor(serviceColor),
+                      fontSize: 10,
+                      fontWeight: 600,
+                      marginLeft: 8,
+                    }}
+                  >
+                    {service.name}
+                  </span>
+                </div>
                 <div className="card__subtitle">
                   {KIND_LABELS[service.kind] ?? service.kind}
                   {service.isActive ? "" : " (inativo)"} · {service.priceRules.length} {service.priceRules.length === 1 ? "regra" : "regras"}
@@ -122,6 +147,10 @@ export default async function ValoresPage({
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
+                </label>
+                <label className="field">
+                  <span className="field__label">Cor na agenda</span>
+                  <input className="input" type="color" name="color" defaultValue={serviceColor} style={{ minHeight: 38, padding: 4 }} />
                 </label>
                 <label className="field" style={{ gridColumn: "1 / -1" }}>
                   <span className="field__label">Descrição</span>
@@ -190,18 +219,6 @@ export default async function ValoresPage({
                       <span className="field__label">Alta (adicional)</span>
                       <input className="input" name="highSeasonAdditionalCents" defaultValue={centsInput(rule.highSeasonAdditionalCents)} />
                     </label>
-                    <label className="field">
-                      <span className="field__label">Taxi base</span>
-                      <input className="input" name="fixedFeeCents" defaultValue={centsInput(rule.fixedFeeCents)} />
-                    </label>
-                    <label className="field">
-                      <span className="field__label">Por km</span>
-                      <input className="input" name="perKmCents" defaultValue={centsInput(rule.perKmCents)} />
-                    </label>
-                    <label className="field">
-                      <span className="field__label">Higiene</span>
-                      <input className="input" name="hygieneFeeCents" defaultValue={centsInput(rule.hygieneFeeCents)} />
-                    </label>
                     <label className="check">
                       <input type="checkbox" name="isActive" defaultChecked={rule.isActive} /> Ativa
                     </label>
@@ -248,18 +265,6 @@ export default async function ValoresPage({
                     <span className="field__label">Alta (adicional)</span>
                     <input className="input" name="highSeasonAdditionalCents" placeholder="0,00" />
                   </label>
-                  <label className="field">
-                    <span className="field__label">Taxi base</span>
-                    <input className="input" name="fixedFeeCents" placeholder="0,00" />
-                  </label>
-                  <label className="field">
-                    <span className="field__label">Por km</span>
-                    <input className="input" name="perKmCents" placeholder="0,00" />
-                  </label>
-                  <label className="field">
-                    <span className="field__label">Higiene</span>
-                    <input className="input" name="hygieneFeeCents" placeholder="0,00" />
-                  </label>
                   <label className="check">
                     <input type="checkbox" name="isActive" defaultChecked /> Ativa
                   </label>
@@ -270,7 +275,8 @@ export default async function ValoresPage({
               </details>
             </div>
           </section>
-        ))}
+          );
+        })}
       </div>
     </>
   );

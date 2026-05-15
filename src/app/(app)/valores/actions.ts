@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
+import { isValidHexColor } from "@/lib/colors";
 import { slugifyServiceName } from "@/lib/service-types";
 import {
   centsField,
@@ -12,6 +13,12 @@ import {
   stringField,
 } from "@/lib/forms";
 import type { ServiceKind, PaymentMethod } from "@/generated/prisma/client";
+
+function colorField(formData: FormData): string | undefined {
+  const raw = stringField(formData, "color");
+  if (!raw) return undefined;
+  return isValidHexColor(raw) ? raw : undefined;
+}
 
 const SERVICE_KINDS: ServiceKind[] = [
   "BOARDING",
@@ -55,6 +62,7 @@ export async function createServiceTypeAction(formData: FormData) {
   });
   if (existing) redirect("/valores?error=servico-duplicado");
 
+  const color = colorField(formData);
   await getPrisma().serviceType.create({
     data: {
       name,
@@ -62,6 +70,7 @@ export async function createServiceTypeAction(formData: FormData) {
       kind: asKind(stringField(formData, "kind")),
       description: optionalStringField(formData, "description"),
       isActive: formData.get("isActive") !== "off",
+      ...(color ? { color } : {}),
     },
   });
 
@@ -84,6 +93,7 @@ export async function updateServiceTypeAction(id: string, formData: FormData) {
   });
   if (existing) redirect("/valores?error=servico-duplicado");
 
+  const color = colorField(formData);
   await getPrisma().serviceType.update({
     where: { id },
     data: {
@@ -92,6 +102,7 @@ export async function updateServiceTypeAction(id: string, formData: FormData) {
       kind: asKind(stringField(formData, "kind")),
       description: optionalStringField(formData, "description"),
       isActive: formData.get("isActive") !== "off",
+      ...(color ? { color } : {}),
     },
   });
 

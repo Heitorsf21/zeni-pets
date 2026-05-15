@@ -8,6 +8,7 @@ import {
   getReservationsByMonthData,
   getUpcomingReservationsData,
 } from "@/lib/app-data";
+import { contrastingTextColor } from "@/lib/colors";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { NovaReservaModal } from "@/app/(app)/reservas/nova-reserva-modal";
 import { AgendaMonthPicker } from "./month-picker";
@@ -108,36 +109,63 @@ export default async function AgendaPage({
               {Array.from({ length: grid.dayOfWeek }, (_, idx) => (
                 <div className="cal__day cal__day--empty" key={`pad-${idx}`} />
               ))}
-              {Array.from({ length: grid.lastDay }, (_, idx) => idx + 1).map((date) => {
-                const isToday =
-                  date === today.getDate()
-                  && reference.getMonth() === today.getMonth()
-                  && reference.getFullYear() === today.getFullYear();
-                const dayReservations = reservations.filter((reservation) =>
-                  reservation.startsAt.getDate() === date
-                  && reservation.startsAt.getMonth() === reference.getMonth()
-                  && reservation.startsAt.getFullYear() === reference.getFullYear(),
-                );
-                return (
-                  <div className={`cal__day ${isToday ? "cal__day--today" : ""}`} key={date}>
-                    <div className="cal__date">{date}</div>
-                    {dayReservations.slice(0, 3).map((reservation, index) => (
-                      <Link
-                        className={`cal__chip ${index === 1 ? "cal__chip--lilac" : index === 2 ? "cal__chip--warm" : ""}`}
-                        href={`/reservas/${reservation.id}`}
-                        key={reservation.id}
-                      >
-                        {reservation.type} - {reservation.pets}
-                      </Link>
-                    ))}
-                    {dayReservations.length > 3 ? (
-                      <div className="subtle" style={{ fontSize: 10, marginTop: 2 }}>
-                        +{dayReservations.length - 3} mais
+              {(() => {
+                const byDay: Record<string, typeof reservations> = {};
+                for (const reservation of reservations) {
+                  for (const day of reservation.days) {
+                    if (!byDay[day.date]) byDay[day.date] = [];
+                    byDay[day.date].push(reservation);
+                  }
+                }
+                for (const key of Object.keys(byDay)) {
+                  byDay[key].sort((a, b) => {
+                    if (a.spansMultipleDays !== b.spansMultipleDays) {
+                      return a.spansMultipleDays ? -1 : 1;
+                    }
+                    return a.startsAt.getTime() - b.startsAt.getTime();
+                  });
+                }
+                const MAX_BARS = 4;
+                const pad = (n: number) => String(n).padStart(2, "0");
+                return Array.from({ length: grid.lastDay }, (_, idx) => idx + 1).map((date) => {
+                  const isToday =
+                    date === today.getDate()
+                    && reference.getMonth() === today.getMonth()
+                    && reference.getFullYear() === today.getFullYear();
+                  const dayKey = `${reference.getFullYear()}-${pad(reference.getMonth() + 1)}-${pad(date)}`;
+                  const dayReservations = byDay[dayKey] ?? [];
+                  const visible = dayReservations.slice(0, MAX_BARS);
+                  const hidden = dayReservations.length - visible.length;
+                  return (
+                    <div className={`cal__day ${isToday ? "cal__day--today" : ""}`} key={date}>
+                      <div className="cal__date">{date}</div>
+                      <div className="cal__bars">
+                        {visible.map((reservation) => {
+                          const label = `${reservation.tutor} - ${reservation.type}`;
+                          return (
+                            <Link
+                              className="cal__bar"
+                              href={`/reservas/${reservation.id}`}
+                              key={reservation.id}
+                              title={label}
+                              aria-label={`Reserva de ${reservation.tutor} - ${reservation.type} - ${reservation.period}`}
+                              style={{
+                                backgroundColor: reservation.serviceColor,
+                                color: contrastingTextColor(reservation.serviceColor),
+                              }}
+                            >
+                              {label}
+                            </Link>
+                          );
+                        })}
+                        {hidden > 0 ? (
+                          <div className="cal__more">+{hidden} mais</div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         </section>
