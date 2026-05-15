@@ -17,7 +17,7 @@ import { PetAvatar } from "@/components/ui/pet-avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationFormData, getTutorDetailData } from "@/lib/app-data";
-import { formatDateShort, formatDateTimeShort, formatReservationPeriod } from "@/lib/date";
+import { formatDateShort, formatReservationPeriod } from "@/lib/date";
 import { brl } from "@/lib/money";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { adjustTutorCreditAction, deleteTutorAction, toggleTutorStatusAction, updateTutorAction } from "../actions";

@@ -74,6 +74,7 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
 
   useLayoutEffect(() => {
     if (!tutorOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTutorDropdownPos(null);
       setPortalTarget(null);
       return;

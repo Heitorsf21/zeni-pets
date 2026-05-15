@@ -112,7 +112,7 @@ describe("historical reservation import edge cases", () => {
       data: expect.objectContaining({
         tutorId: "tutor-1",
         type: "CREDIT_ADDED",
-        description: "Sinal em credito - Fabiana Gomes / Kiara",
+        description: "Sinal em crédito - Fabiana Gomes / Kiara",
         amountCents: 10000,
         importRecordId: "record-1",
       }),

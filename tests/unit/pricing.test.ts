@@ -6,7 +6,21 @@ import {
   sortPriceRules,
 } from "@/lib/pricing";
 
-const rules = [
+type TestPriceRule = {
+  id: string;
+  serviceTypeId: string;
+  label: string;
+  paymentMethod: string;
+  firstPetCents: number;
+  additionalPetCents: number | null;
+  highSeasonFirstPetCents: number | null;
+  highSeasonAdditionalCents: number | null;
+  fixedFeeCents: number | null;
+  perKmCents: number | null;
+  hygieneFeeCents: number | null;
+};
+
+const rules: TestPriceRule[] = [
   {
     id: "card",
     serviceTypeId: "service",
@@ -16,6 +30,9 @@ const rules = [
     additionalPetCents: 6520,
     highSeasonFirstPetCents: null,
     highSeasonAdditionalCents: null,
+    fixedFeeCents: null,
+    perKmCents: null,
+    hygieneFeeCents: null,
   },
   {
     id: "pix",
@@ -26,6 +43,9 @@ const rules = [
     additionalPetCents: 6000,
     highSeasonFirstPetCents: 9500,
     highSeasonAdditionalCents: 7000,
+    fixedFeeCents: null,
+    perKmCents: null,
+    hygieneFeeCents: null,
   },
 ];
 
@@ -65,6 +85,9 @@ describe("pricing helpers", () => {
             label: "Taxi",
             paymentMethod: "PIX",
             firstPetCents: 0,
+            additionalPetCents: 0,
+            highSeasonFirstPetCents: null,
+            highSeasonAdditionalCents: null,
             fixedFeeCents: 1500,
             perKmCents: 350,
             hygieneFeeCents: null,
@@ -82,6 +105,9 @@ describe("pricing helpers", () => {
             label: "Taxi",
             paymentMethod: "PIX",
             firstPetCents: 0,
+            additionalPetCents: 0,
+            highSeasonFirstPetCents: null,
+            highSeasonAdditionalCents: null,
             fixedFeeCents: 2000,
             perKmCents: 400,
             hygieneFeeCents: 2500,
