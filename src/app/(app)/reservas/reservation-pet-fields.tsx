@@ -32,6 +32,7 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
   const [tutorDropdownPos, setTutorDropdownPos] = useState<
     { top: number; left: number; width: number } | null
   >(null);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
   const tutorsById = useMemo(() => new Map(tutors.map((tutor) => [tutor.id, tutor])), [tutors]);
   const selectedTutor = selectedTutorId ? tutorsById.get(selectedTutorId) ?? null : null;
@@ -74,8 +75,11 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
   useLayoutEffect(() => {
     if (!tutorOpen) {
       setTutorDropdownPos(null);
+      setPortalTarget(null);
       return;
     }
+    const dialogAncestor = tutorRowRef.current?.closest("dialog");
+    setPortalTarget(dialogAncestor ?? document.body);
     function recompute() {
       const anchor = tutorRowRef.current;
       if (!anchor) return;
@@ -150,7 +154,7 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
             </button>
           ) : null}
         </span>
-        {tutorOpen && tutorDropdownPos && typeof document !== "undefined"
+        {tutorOpen && tutorDropdownPos && portalTarget
           ? createPortal(
               <ul
                 ref={tutorDropdownRef}
@@ -161,7 +165,7 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
                   left: tutorDropdownPos.left,
                   width: tutorDropdownPos.width,
                   zIndex: 1000,
-                  background: "var(--surface)",
+                  background: "var(--bg-elevated)",
                   border: "1px solid var(--border)",
                   borderRadius: 8,
                   maxHeight: 260,
@@ -204,7 +208,7 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
                   ))
                 )}
               </ul>,
-              document.body,
+              portalTarget,
             )
           : null}
       </div>
