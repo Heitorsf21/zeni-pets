@@ -3,6 +3,8 @@ export type PetAgeInput = {
   ageReferenceYear: number | null;
 };
 
+export type PetAgeFullInput = PetAgeInput & { birthDate: Date | null };
+
 export function parseAgeFromLabel(label: string | null | undefined): number | null {
   if (!label) return null;
   const match = label.match(/(\d+)/);
@@ -23,7 +25,30 @@ export function normalizeAgeInput(raw: string | null | undefined): {
   return { label: `${numeric} ${numeric === 1 ? "ano" : "anos"}`, years: numeric };
 }
 
-export function displayPetAge(pet: PetAgeInput, now: Date = new Date()): string {
+export function derivePetAgeFromBirthDate(
+  birthDate: Date | null,
+  now: Date = new Date(),
+): { years: number; label: string } | null {
+  if (!birthDate) return null;
+  const birth = birthDate instanceof Date ? birthDate : new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return null;
+  let years = now.getFullYear() - birth.getFullYear();
+  const monthDiff = now.getMonth() - birth.getMonth();
+  const dayDiff = now.getDate() - birth.getDate();
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+    years -= 1;
+  }
+  if (years < 0) years = 0;
+  return { years, label: `${years} ${years === 1 ? "ano" : "anos"}` };
+}
+
+export function displayPetAge(
+  pet: PetAgeInput | PetAgeFullInput,
+  now: Date = new Date(),
+): string {
+  const birthDate = "birthDate" in pet ? pet.birthDate : null;
+  const fromBirth = derivePetAgeFromBirthDate(birthDate, now);
+  if (fromBirth) return fromBirth.label;
   const base = parseAgeFromLabel(pet.ageLabel);
   if (base == null || pet.ageReferenceYear == null) return pet.ageLabel ?? "-";
   const years = base + Math.max(now.getFullYear() - pet.ageReferenceYear, 0);

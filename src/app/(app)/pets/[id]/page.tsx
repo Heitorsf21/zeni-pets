@@ -19,7 +19,7 @@ import { FlashMessage } from "@/components/ui/flash-message";
 import { ConfirmForm } from "@/components/ui/confirm-form";
 import { Tabs } from "@/components/ui/tabs";
 import { getPetDetailData, getPetTasksData, getReservationFormData } from "@/lib/app-data";
-import { formatDateOnly, formatDateShort, formatReservationPeriod } from "@/lib/date";
+import { formatDateShort, formatReservationPeriod } from "@/lib/date";
 import { displayPetAge } from "@/lib/pet-age";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { calculateChargeableStayUnits } from "@/lib/rules";
@@ -79,7 +79,11 @@ export default async function PetDetailPage({
     { id: "historico", label: "Histórico", href: tabHref("historico") },
   ];
 
-  const ageDisplay = displayPetAge({ ageLabel: pet.ageLabel, ageReferenceYear: pet.ageReferenceYear });
+  const ageDisplay = displayPetAge({
+    ageLabel: pet.ageLabel,
+    ageReferenceYear: pet.ageReferenceYear,
+    birthDate: pet.birthDate,
+  });
   const editPetModal = (
     <EditarPetModal
       pet={{
@@ -89,6 +93,7 @@ export default async function PetDetailPage({
         breed: pet.breed,
         ageLabel: pet.ageLabel,
         ageReferenceYear: pet.ageReferenceYear,
+        birthDate: pet.birthDate,
         isNeutered: pet.isNeutered,
         isSociable: pet.isSociable,
         foodNotes: pet.foodNotes,

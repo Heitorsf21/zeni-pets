@@ -1,8 +1,10 @@
 "use client";
 
 import { Edit } from "lucide-react";
+import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmForm } from "@/components/ui/confirm-form";
+import { toDateInputValue } from "@/lib/date";
 
 type Pet = {
   id: string;
@@ -11,6 +13,7 @@ type Pet = {
   breed: string | null;
   ageLabel: string | null;
   ageReferenceYear: number | null;
+  birthDate: Date | null;
   isNeutered: boolean | null;
   isSociable: boolean | null;
   foodNotes: string | null;
@@ -42,6 +45,7 @@ export function EditarPetModal({
   triggerVariant = "default",
   triggerLabel = "Editar ficha",
 }: Props) {
+  const [ageMode, setAgeMode] = useState<"text" | "date">(pet.birthDate ? "date" : "text");
   return (
     <Modal
       trigger={
@@ -69,24 +73,67 @@ export function EditarPetModal({
           <span className="field__label">Raça</span>
           <input className="input" name="breed" defaultValue={pet.breed ?? ""} />
         </label>
-        <label className="field">
-          <span className="field__label">Idade aproximada (anos)</span>
-          <input
-            className="input"
-            name="ageLabel"
-            type="number"
-            min={0}
-            max={40}
-            step={1}
-            inputMode="numeric"
-            defaultValue={pet.ageLabel?.match(/(\d+)/)?.[1] ?? ""}
-          />
-          {pet.ageReferenceYear ? (
-            <span className="subtle" style={{ fontSize: 11 }}>
-              Idade registrada em {pet.ageReferenceYear}
-            </span>
-          ) : null}
-        </label>
+        <div className="field">
+          <span className="field__label">Idade</span>
+          <div className="row" style={{ gap: 12, marginBottom: 6 }}>
+            <label className="check">
+              <input
+                type="radio"
+                name="ageMode"
+                value="text"
+                checked={ageMode === "text"}
+                onChange={() => setAgeMode("text")}
+              />
+              Idade aproximada
+            </label>
+            <label className="check">
+              <input
+                type="radio"
+                name="ageMode"
+                value="date"
+                checked={ageMode === "date"}
+                onChange={() => setAgeMode("date")}
+              />
+              Data de nascimento
+            </label>
+          </div>
+          {ageMode === "text" ? (
+            <>
+              <input
+                className="input"
+                name="ageLabel"
+                type="number"
+                min={0}
+                max={40}
+                step={1}
+                inputMode="numeric"
+                placeholder="Anos"
+                aria-label="Idade aproximada em anos"
+                defaultValue={pet.ageLabel?.match(/(\d+)/)?.[1] ?? ""}
+              />
+              {pet.ageReferenceYear ? (
+                <span className="subtle" style={{ fontSize: 11 }}>
+                  Idade registrada em {pet.ageReferenceYear}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <input
+                className="input"
+                name="birthDate"
+                type="date"
+                min="1990-01-01"
+                autoComplete="bday"
+                aria-label="Data de nascimento"
+                defaultValue={pet.birthDate ? toDateInputValue(pet.birthDate) : ""}
+              />
+              <span className="subtle" style={{ fontSize: 11 }}>
+                Idade calculada automaticamente da data de nascimento.
+              </span>
+            </>
+          )}
+        </div>
         <div className="row" style={{ gridColumn: "1 / -1" }}>
           <label className="check">
             <input type="checkbox" name="isNeutered" defaultChecked={Boolean(pet.isNeutered)} /> Castrado
