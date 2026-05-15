@@ -226,16 +226,18 @@ model Pet {
 }
 
 model ServiceType {
-  id           String             @id @default(uuid())
-  name         String
-  slug         String?            @unique
-  kind         ServiceKind
-  description  String?
-  isActive     Boolean            @default(true)
-  priceRules   ServicePriceRule[]
-  reservations Reservation[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id              String             @id @default(uuid())
+  name            String
+  slug            String?            @unique
+  kind            ServiceKind
+  description     String?
+  color           String?            @default("#1f6b6f")
+  isActive        Boolean            @default(true)
+  priceRules      ServicePriceRule[]
+  reservations    Reservation[]
+  reservationPets ReservationPet[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 }
 
 model ServicePriceRule {
@@ -255,6 +257,7 @@ model ServicePriceRule {
   importRecordId            String?
   importRecord              ImportRecord? @relation("ServicePriceImportSource", fields: [importRecordId], references: [id], onDelete: SetNull)
   reservations              Reservation[]
+  reservationPets           ReservationPet[] @relation("ReservationPetPriceRule")
   sourceFileName            String?
   sourceSheet               String?
   sourceRow                 Int?
@@ -320,6 +323,7 @@ model Reservation {
   sourceBlock           Int?
   sourcePayload         Json?
   reservationPets       ReservationPet[]
+  visitDates            ReservationVisitDate[]
   payments              Payment[]
   financialEntries      FinancialEntry[]
   creditTransactions    TutorCreditTransaction[]
@@ -330,16 +334,38 @@ model Reservation {
   @@index([priceRuleId])
 }
 
-model ReservationPet {
+model ReservationVisitDate {
   id            String      @id @default(uuid())
   reservationId String
   reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  petId         String
-  pet           Pet         @relation(fields: [petId], references: [id])
-  priceRole     String?
+  date          DateTime    @db.Date
   createdAt     DateTime    @default(now())
 
+  @@unique([reservationId, date])
+  @@index([reservationId])
+  @@index([date])
+}
+
+model ReservationPet {
+  id               String             @id @default(uuid())
+  reservationId    String
+  reservation      Reservation        @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  petId            String
+  pet              Pet                @relation(fields: [petId], references: [id])
+  priceRole        String?
+  serviceTypeId    String?
+  serviceType      ServiceType?       @relation(fields: [serviceTypeId], references: [id], onDelete: SetNull)
+  priceRuleId      String?
+  priceRule        ServicePriceRule?  @relation("ReservationPetPriceRule", fields: [priceRuleId], references: [id], onDelete: SetNull)
+  pricingMode      String?
+  manualDailyCents Int?
+  manualTotalCents Int?
+  baseAmountCents  Int                @default(0)
+  createdAt        DateTime           @default(now())
+
   @@unique([reservationId, petId])
+  @@index([serviceTypeId])
+  @@index([priceRuleId])
 }
 
 model Payment {
