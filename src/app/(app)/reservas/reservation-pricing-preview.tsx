@@ -123,8 +123,7 @@ export function ReservationPricingPreview({
       endsAtExclusive = visit ? addOneDay(visit) : null;
     } else {
       startsAt = parseLocalDate(formData.get("startsAt"));
-      const endsAtInclusive = parseLocalDate(formData.get("endsAt"));
-      endsAtExclusive = endsAtInclusive ? addOneDay(endsAtInclusive) : null;
+      endsAtExclusive = parseLocalDate(formData.get("endsAt"));
     }
     const petCount = formData.getAll("petIds").filter(Boolean).length;
     const chargeableUnits = startsAt && endsAtExclusive ? calculateChargeableStayUnits(startsAt, endsAtExclusive) : 0;
