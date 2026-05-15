@@ -20,51 +20,36 @@ This version has breaking changes — APIs, conventions, and file structure may 
 **URL de produção:** https://zeni-pets.vercel.app
 **Login da Fernanda:** zeni.pets@gmail.com
 
-## Como fazer deploy de uma nova feature
+## Workspace
 
-O Plano Hobby da Vercel não aceita commits de colaboradores externos — o deploy é sempre feito via **Vercel CLI** com o token da conta da Fernanda.
+O projeto vive em **`C:\Projects\zeni-pets`** (caminho local, fora do OneDrive). Todo trabalho — edição, testes, commits e push — acontece nessa pasta.
 
-### Passo a passo
+Remotes configurados:
+- `origin` → `Heitorsf21/zeni-pets` (repo dev)
+- `zenipets` → `zenipets/zeni-pets` (repo produção, onde a Vercel escuta)
 
-1. **Desenvolva e teste localmente** com Docker rodando:
-   ```bash
-   npm run db:docker:up
-   npm run dev
-   ```
+> Versão anterior do projeto morava em `c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS` e era espelhada para o clone via robocopy. Esse fluxo foi abandonado em 2026-05-15 porque o git dentro do OneDrive falha com arquivos cloud-only. Se a pasta antiga ainda existir, pode ser removida.
 
-2. **Copie as alterações** para o clone fora do OneDrive (o git dentro do OneDrive tem problemas com arquivos cloud-only):
-   ```bash
-   # Copiar src/ modificado:
-   robocopy "c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS\src" "C:\Projects\zeni-pets\src" /E /XA:O
-   # Copiar prisma/ se houve mudança de schema ou nova migration:
-   robocopy "c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS\prisma" "C:\Projects\zeni-pets\prisma" /E /XA:O
-   ```
+## Como fazer deploy
 
-3. **Commit e push** para o repo da Fernanda (onde a Vercel está conectada):
-   ```bash
-   git -C "C:\Projects\zeni-pets" add .
-   git -C "C:\Projects\zeni-pets" commit -m "feat: descrição da feature"
-   git -C "C:\Projects\zeni-pets" push zenipets main
-   # Também manter o repo de dev atualizado:
-   git -C "C:\Projects\zeni-pets" push origin main
-   ```
+A Vercel está conectada ao repo `zenipets/zeni-pets` e faz **deploy automático** a cada push em `main`. Não precisa de Vercel CLI nem de token.
 
-4. **Deploy via Vercel CLI:**
-   ```bash
-   cd "C:\Projects\zeni-pets"
-   vercel --prod --yes --token <VERCEL_TOKEN>
-   ```
-   > O token da Vercel é gerado em: vercel.com → Account Settings → Tokens.
-   > Gerar um novo token se o anterior expirar ou for perdido (conta zeni.petss@gmail.com).
+```bash
+git add .
+git commit -m "feat: descrição da feature"
+git push zenipets main   # dispara o build na Vercel
+git push origin main     # mantém o repo de dev sincronizado
+```
+
+Acompanhe o build em https://vercel.com/zenipets-projects/zeni-pets/deployments. Produção: https://zeni-pets.vercel.app.
 
 ### Migrations de banco
 
 Migrations rodam **automaticamente no build** (o script `build` inclui `prisma migrate deploy`). Para adicionar uma nova migration:
 
 ```bash
-# No projeto OneDrive, localmente:
 npx prisma migrate dev --name nome_da_migration
-# Isso cria o arquivo em prisma/migrations/ — inclua no commit
+# Cria o arquivo em prisma/migrations/ — inclua no commit
 ```
 
 ## Ambiente local de desenvolvimento
@@ -80,27 +65,7 @@ O banco local usa:
 - User/pass: `zeni / zeni`
 - Database: `zeni_pets`
 
-## Clone de trabalho
+## Variáveis de ambiente
 
-O projeto fica em `c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS` (OneDrive).
-O git dentro do OneDrive tem bugs com arquivos cloud-only — por isso existe um clone separado:
-
-**Clone de produção:** `C:\Projects\zeni-pets`
-- Remote `origin` → `Heitorsf21/zeni-pets` (repo dev)
-- Remote `zenipets` → `zenipets/zeni-pets` (repo produção, onde Vercel escuta)
-
-Para sincronizar tudo de uma vez do OneDrive para o clone:
-```bash
-robocopy "c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS\src" "C:\Projects\zeni-pets\src" /E /XA:O /NFL /NDL
-robocopy "c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS\prisma" "C:\Projects\zeni-pets\prisma" /E /XA:O /NFL /NDL
-robocopy "c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS\tests" "C:\Projects\zeni-pets\tests" /E /XA:O /NFL /NDL
-robocopy "c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS\scripts" "C:\Projects\zeni-pets\scripts" /E /XA:O /NFL /NDL
-Copy-Item "c:\Users\heito\OneDrive\Área de Trabalho\ZENI PETS\package.json" "C:\Projects\zeni-pets\package.json" -Force
-```
-
-## Variáveis de ambiente de produção
-
-Gerenciadas no painel da Vercel:
-https://vercel.com/zenipets-projects/zeni-pets/settings/environment-variables
-
-Nunca commitar `.env` ou `.env.local` com valores reais — o `.gitignore` já protege esses arquivos.
+- **Produção:** gerenciadas no painel da Vercel — https://vercel.com/zenipets-projects/zeni-pets/settings/environment-variables
+- **Local:** `.env` em `C:\Projects\zeni-pets\.env` (gitignored — nunca commitar)
