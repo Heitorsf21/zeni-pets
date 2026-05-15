@@ -92,7 +92,7 @@ export default async function ReservasPage({
               activeCount={activeCount}
             />
             <NovaReservaModal
-              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
+              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name, phone: t.phone, email: t.email }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
               serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
               seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}

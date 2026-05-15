@@ -25,6 +25,27 @@ describe("reservation calculation rules", () => {
     ).toBe(1);
   });
 
+  it("treats a date-only inclusive range as N+1 nights when endsAt is the day after the last selected day", () => {
+    // User picks 07/05 to 14/05 in the date input. The action stores
+    // startsAt=07/05 00:00 and endsAt=15/05 00:00 (exclusive). That covers 8 days.
+    expect(
+      calculateChargeableStayUnits(
+        new Date(2026, 4, 7),
+        new Date(2026, 4, 15),
+      ),
+    ).toBe(8);
+  });
+
+  it("treats a PET_SITTING visit as a single unit", () => {
+    // Visit on 07/05: startsAt=07/05 00:00, endsAt=08/05 00:00.
+    expect(
+      calculateChargeableStayUnits(
+        new Date(2026, 4, 7),
+        new Date(2026, 4, 8),
+      ),
+    ).toBe(1);
+  });
+
   it("suggests 50% deposit and balance by default", () => {
     expect(calculateDepositPlan(48_000)).toEqual({
       depositSuggestedCents: 24_000,

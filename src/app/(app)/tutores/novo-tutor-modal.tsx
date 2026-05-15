@@ -29,7 +29,7 @@ export function NovoTutorModal() {
         </label>
         <label className="field">
           <span className="field__label">Nascimento</span>
-          <input className="input" name="birthDate" type="date" />
+          <input className="input" name="birthDate" type="date" min="1900-01-01" />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Endereço</span>

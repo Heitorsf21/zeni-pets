@@ -1,10 +1,9 @@
 import { PawPrint } from "lucide-react";
-import Link from "next/link";
 import { Topbar } from "@/components/layout/topbar";
-import { PetAvatar } from "@/components/ui/pet-avatar";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { getPetsData, getReservationFormData } from "@/lib/app-data";
 import { NovoPetModal } from "./novo-pet-modal";
+import { PetsListClient } from "./pets-list-client";
 
 export default async function PetsPage({
   searchParams,
@@ -31,31 +30,21 @@ export default async function PetsPage({
               <div className="card__subtitle">{pets.length} {pets.length === 1 ? "pet cadastrado" : "pets cadastrados"}</div>
             </div>
           </div>
-          <div className="card__body" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
-            {pets.map((pet) => (
-              <article className="card" key={pet.id} style={{ borderRadius: "var(--r-md)" }}>
-                <div className="card__body stack" style={{ gap: 12 }}>
-                  <div className="row">
-                    <PetAvatar name={pet.name} size="lg" />
-                    <div>
-                      <strong>{pet.name}</strong>
-                      <div className="subtle" style={{ fontSize: 12 }}>{pet.tutor}</div>
-                    </div>
-                  </div>
-                  <div className="subtle" style={{ fontSize: 12 }}>
-                    {pet.breed} - {pet.age}
-                  </div>
-                  <div className="row">
-                    <span className="badge badge--ativo">{pet.neutered ? "Castrado" : "Não castrado"}</span>
-                    <span className="badge">{pet.sociable ? "Sociável" : "Reservado"}</span>
-                  </div>
-                  <Link className="btn" href={`/pets/${pet.id}/ficha`}>Ver ficha</Link>
-                </div>
-              </article>
-            ))}
+          <div className="card__body">
+            <PetsListClient
+              pets={pets.map((pet) => ({
+                id: pet.id,
+                name: pet.name,
+                tutor: pet.tutor,
+                breed: pet.breed,
+                ageLabel: pet.ageLabel,
+                ageReferenceYear: pet.ageReferenceYear,
+                neutered: pet.neutered,
+                sociable: pet.sociable,
+              }))}
+            />
           </div>
         </section>
-
       </div>
     </>
   );

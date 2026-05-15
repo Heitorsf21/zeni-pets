@@ -3,6 +3,7 @@
 import { Edit } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmForm } from "@/components/ui/confirm-form";
+import { toDateInputValue } from "@/lib/date";
 
 type Tutor = {
   id: string;
@@ -73,7 +74,8 @@ export function EditarTutorModal({
             className="input"
             name="birthDate"
             type="date"
-            defaultValue={tutor.birthDate ? tutor.birthDate.toISOString().slice(0, 10) : ""}
+            min="1900-01-01"
+            defaultValue={tutor.birthDate ? toDateInputValue(tutor.birthDate) : ""}
           />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>

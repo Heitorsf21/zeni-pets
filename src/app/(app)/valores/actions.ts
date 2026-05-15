@@ -36,17 +36,24 @@ function asMethod(value: string): PaymentMethod {
     : "PIX";
 }
 
+function revalidatePricingSurfaces() {
+  revalidatePath("/valores");
+  revalidatePath("/reservas");
+  revalidatePath("/nova-reserva");
+  revalidatePath("/configuracoes");
+}
+
 export async function createServiceTypeAction(formData: FormData) {
   await requireUser();
   const name = stringField(formData, "name");
-  if (!name) redirect("/configuracoes/servicos?error=nome-obrigatorio");
+  if (!name) redirect("/valores?error=nome-obrigatorio");
   const slug = slugifyServiceName(name);
 
   const existing = await getPrisma().serviceType.findFirst({
     where: { OR: [{ slug }, { name: { equals: name, mode: "insensitive" } }] },
     select: { id: true },
   });
-  if (existing) redirect("/configuracoes/servicos?error=servico-duplicado");
+  if (existing) redirect("/valores?error=servico-duplicado");
 
   await getPrisma().serviceType.create({
     data: {
@@ -58,14 +65,14 @@ export async function createServiceTypeAction(formData: FormData) {
     },
   });
 
-  revalidatePath("/configuracoes/servicos");
-  redirect("/configuracoes/servicos?saved=1");
+  revalidatePricingSurfaces();
+  redirect("/valores?saved=1");
 }
 
 export async function updateServiceTypeAction(id: string, formData: FormData) {
   await requireUser();
   const name = stringField(formData, "name");
-  if (!name) redirect("/configuracoes/servicos?error=nome-obrigatorio");
+  if (!name) redirect("/valores?error=nome-obrigatorio");
   const slug = slugifyServiceName(name);
 
   const existing = await getPrisma().serviceType.findFirst({
@@ -75,7 +82,7 @@ export async function updateServiceTypeAction(id: string, formData: FormData) {
     },
     select: { id: true },
   });
-  if (existing) redirect("/configuracoes/servicos?error=servico-duplicado");
+  if (existing) redirect("/valores?error=servico-duplicado");
 
   await getPrisma().serviceType.update({
     where: { id },
@@ -88,18 +95,18 @@ export async function updateServiceTypeAction(id: string, formData: FormData) {
     },
   });
 
-  revalidatePath("/configuracoes/servicos");
-  redirect("/configuracoes/servicos?saved=1");
+  revalidatePricingSurfaces();
+  redirect("/valores?saved=1");
 }
 
 export async function deleteServiceTypeAction(id: string) {
   await requireUser();
   const usage = await getPrisma().reservation.count({ where: { serviceTypeId: id } });
-  if (usage > 0) redirect("/configuracoes/servicos?error=servico-em-uso");
+  if (usage > 0) redirect("/valores?error=servico-em-uso");
 
   await getPrisma().serviceType.delete({ where: { id } });
-  revalidatePath("/configuracoes/servicos");
-  redirect("/configuracoes/servicos?deleted=1");
+  revalidatePricingSurfaces();
+  redirect("/valores?deleted=1");
 }
 
 export async function createPriceRuleAction(formData: FormData) {
@@ -108,7 +115,7 @@ export async function createPriceRuleAction(formData: FormData) {
   const label = stringField(formData, "label");
   const firstPet = centsFieldStrict(formData, "firstPetCents");
   if (!serviceTypeId || !label || firstPet == null) {
-    redirect("/configuracoes/servicos?error=dados-invalidos");
+    redirect("/valores?error=dados-invalidos");
   }
 
   await getPrisma().servicePriceRule.create({
@@ -127,8 +134,8 @@ export async function createPriceRuleAction(formData: FormData) {
     },
   });
 
-  revalidatePath("/configuracoes/servicos");
-  redirect("/configuracoes/servicos?saved=1");
+  revalidatePricingSurfaces();
+  redirect("/valores?saved=1");
 }
 
 export async function updatePriceRuleAction(id: string, formData: FormData) {
@@ -136,7 +143,7 @@ export async function updatePriceRuleAction(id: string, formData: FormData) {
   const label = stringField(formData, "label");
   const firstPet = centsFieldStrict(formData, "firstPetCents");
   if (!label || firstPet == null) {
-    redirect("/configuracoes/servicos?error=dados-invalidos");
+    redirect("/valores?error=dados-invalidos");
   }
 
   await getPrisma().servicePriceRule.update({
@@ -155,13 +162,13 @@ export async function updatePriceRuleAction(id: string, formData: FormData) {
     },
   });
 
-  revalidatePath("/configuracoes/servicos");
-  redirect("/configuracoes/servicos?saved=1");
+  revalidatePricingSurfaces();
+  redirect("/valores?saved=1");
 }
 
 export async function deletePriceRuleAction(id: string) {
   await requireUser();
   await getPrisma().servicePriceRule.delete({ where: { id } });
-  revalidatePath("/configuracoes/servicos");
-  redirect("/configuracoes/servicos?deleted=1");
+  revalidatePricingSurfaces();
+  redirect("/valores?deleted=1");
 }

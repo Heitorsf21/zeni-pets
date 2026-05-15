@@ -135,12 +135,12 @@ export function ReservationTaskFields({ pets, formId }: Props) {
           ) : null}
 
           <label className="field">
-            <span className="field__label">Início da tarefa</span>
-            <input className="input" name="reservationTaskDate" type="datetime-local" />
+            <span className="field__label">Data inicial</span>
+            <input className="input" name="reservationTaskDate" type="date" />
           </label>
           <label className="field">
-            <span className="field__label">Termina em (opcional)</span>
-            <input className="input" name="reservationTaskEndsAt" type="datetime-local" />
+            <span className="field__label">Data final (opcional)</span>
+            <input className="input" name="reservationTaskEndsAt" type="date" />
           </label>
           <label className="field" style={{ gridColumn: "1 / -1" }}>
             <span className="field__label">Descrição da tarefa</span>

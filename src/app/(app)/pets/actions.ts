@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { boolField, optionalStringField, stringField } from "@/lib/forms";
 import { getPrisma } from "@/lib/db";
+import { normalizeAgeInput, parseAgeFromLabel } from "@/lib/pet-age";
 
 export async function createPetAction(formData: FormData) {
   await requireUser();
@@ -12,18 +13,24 @@ export async function createPetAction(formData: FormData) {
   const name = stringField(formData, "name");
   if (!tutorId || !name) redirect("/pets?error=dados-obrigatorios");
 
+  const age = normalizeAgeInput(optionalStringField(formData, "ageLabel"));
   const pet = await getPrisma().pet.create({
     data: {
       tutorId,
       name,
       species: optionalStringField(formData, "species") ?? "dog",
       breed: optionalStringField(formData, "breed"),
-      ageLabel: optionalStringField(formData, "ageLabel"),
+      ageLabel: age.label,
+      ageReferenceYear: age.years != null ? new Date().getFullYear() : null,
       isNeutered: boolField(formData, "isNeutered"),
       isSociable: boolField(formData, "isSociable"),
       foodNotes: optionalStringField(formData, "foodNotes"),
+      foodRestrictions: optionalStringField(formData, "foodRestrictions"),
+      foodTreats: optionalStringField(formData, "foodTreats"),
       healthNotes: optionalStringField(formData, "healthNotes"),
       behaviorNotes: optionalStringField(formData, "behaviorNotes"),
+      historyNotes: optionalStringField(formData, "historyNotes"),
+      attentionNotes: optionalStringField(formData, "attentionNotes"),
       vetName: optionalStringField(formData, "vetName"),
       vetPhone: optionalStringField(formData, "vetPhone"),
       deliveredItems: optionalStringField(formData, "deliveredItems"),
@@ -59,18 +66,37 @@ export async function updatePetAction(id: string, formData: FormData) {
   const name = stringField(formData, "name");
   if (!name) redirect(`/pets/${id}/ficha?error=nome-obrigatorio`);
 
+  const current = await getPrisma().pet.findUnique({
+    where: { id },
+    select: { ageLabel: true, ageReferenceYear: true },
+  });
+  const age = normalizeAgeInput(optionalStringField(formData, "ageLabel"));
+  const previousYears = parseAgeFromLabel(current?.ageLabel ?? null);
+  const ageChanged = age.years != null && age.years !== previousYears;
+  const ageReferenceYear =
+    age.years == null
+      ? null
+      : ageChanged || current?.ageReferenceYear == null
+        ? new Date().getFullYear()
+        : current.ageReferenceYear;
+
   await getPrisma().pet.update({
     where: { id },
     data: {
       name,
       species: optionalStringField(formData, "species") ?? "dog",
       breed: optionalStringField(formData, "breed"),
-      ageLabel: optionalStringField(formData, "ageLabel"),
+      ageLabel: age.label,
+      ageReferenceYear,
       isNeutered: boolField(formData, "isNeutered"),
       isSociable: boolField(formData, "isSociable"),
       foodNotes: optionalStringField(formData, "foodNotes"),
+      foodRestrictions: optionalStringField(formData, "foodRestrictions"),
+      foodTreats: optionalStringField(formData, "foodTreats"),
       healthNotes: optionalStringField(formData, "healthNotes"),
       behaviorNotes: optionalStringField(formData, "behaviorNotes"),
+      historyNotes: optionalStringField(formData, "historyNotes"),
+      attentionNotes: optionalStringField(formData, "attentionNotes"),
       vetName: optionalStringField(formData, "vetName"),
       vetPhone: optionalStringField(formData, "vetPhone"),
       deliveredItems: optionalStringField(formData, "deliveredItems"),

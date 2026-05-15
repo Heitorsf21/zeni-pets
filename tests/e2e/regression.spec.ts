@@ -334,17 +334,17 @@ test("AUDIT 21: dashboard task CRUD via modal - create, toggle, delete", async (
   await expect(page.getByText("Tarefa de teste e2e")).not.toBeVisible();
 });
 
-test("AUDIT 22: configuracoes/servicos creates ServiceType and PriceRule", async ({ page }) => {
+test("AUDIT 22: /valores creates ServiceType and PriceRule", async ({ page }) => {
   await login(page);
-  await page.goto("/configuracoes/servicos");
+  await page.goto("/valores");
   // Create new ServiceType
   await page.locator('section').first().locator('input[name="name"]').fill("Servico Auditoria");
   await page.locator('section').first().getByRole("button", { name: "Salvar tipo" }).click();
-  await expect(page.getByRole("heading", { level: 3 }).filter({ hasText: "Servico Auditoria" }).or(page.getByText("Servico Auditoria"))).toBeVisible();
+  await expect(page.getByText("Servico Auditoria").first()).toBeVisible();
 
   // Add a price rule under that service
   const serviceCard = page.locator("section").filter({ has: page.getByText("Servico Auditoria") }).first();
-  await serviceCard.getByText("Nova regra de preco").click();
+  await serviceCard.getByText("Adicionar nova regra").click();
   await serviceCard.locator('input[name="label"]').last().fill("Padrao");
   await serviceCard.locator('input[name="firstPetCents"]').last().fill("R$ 80,00");
   await serviceCard.getByRole("button", { name: "Adicionar regra" }).click();

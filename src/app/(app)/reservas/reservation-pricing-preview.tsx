@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { brl, parseCurrencyToCents } from "@/lib/money";
 import {
-  calculatePriceRuleBaseCents,
+  calculateManualDailyBaseCents,
+  calculatePriceRuleStayCents,
   calculatePriceRuleUnitCents,
   hasTaxiPricing,
   selectDefaultPriceRule,
@@ -13,23 +14,38 @@ import {
 import type { ReservationSeasonOption, ReservationServiceOption } from "@/lib/reservation-form-options";
 import {
   calculateChargeableStayUnits,
+  countHighSeasonStayUnits,
   calculateReservationTotals,
   calculateTaxiPetCents,
-  isHighSeason,
 } from "@/lib/rules";
 
 type Props = {
   serviceTypes: ReservationServiceOption[];
   seasonPeriods?: ReservationSeasonOption[];
   depositPercent?: number;
+  highSeasonSurchargePercent?: number;
   formId?: string;
   compact?: boolean;
 };
 
 function parseLocalDate(value: FormDataEntryValue | null) {
-  if (!value) return null;
-  const date = new Date(String(value));
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const [y, m, d] = trimmed.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const date = new Date(y, m - 1, d);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addOneDay(date: Date) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + 1);
+  return copy;
+}
+
+function isPetSittingService(service: { kind?: string | null } | null | undefined) {
+  return service?.kind === "PET_SITTING";
 }
 
 function parseDistanceKm(value: FormDataEntryValue | null) {
@@ -46,6 +62,7 @@ export function ReservationPricingPreview({
   serviceTypes,
   seasonPeriods = [],
   depositPercent = 50,
+  highSeasonSurchargePercent = 0,
   formId,
   compact = false,
 }: Props) {
@@ -97,20 +114,43 @@ export function ReservationPricingPreview({
       rules.find((rule) => rule.id === String(formData.get("priceRuleId") ?? "")) ??
       (selectedService ? selectDefaultPriceRule(rules) : null);
 
-    const startsAt = parseLocalDate(formData.get("startsAt"));
-    const endsAt = parseLocalDate(formData.get("endsAt"));
+    const petSitting = isPetSittingService(selectedService);
+    let startsAt: Date | null;
+    let endsAtExclusive: Date | null;
+    if (petSitting) {
+      const visit = parseLocalDate(formData.get("visitDate")) ?? parseLocalDate(formData.get("startsAt"));
+      startsAt = visit;
+      endsAtExclusive = visit ? addOneDay(visit) : null;
+    } else {
+      startsAt = parseLocalDate(formData.get("startsAt"));
+      const endsAtInclusive = parseLocalDate(formData.get("endsAt"));
+      endsAtExclusive = endsAtInclusive ? addOneDay(endsAtInclusive) : null;
+    }
     const petCount = formData.getAll("petIds").filter(Boolean).length;
-    const chargeableUnits = startsAt && endsAt ? calculateChargeableStayUnits(startsAt, endsAt) : 0;
-    const highSeason = startsAt ? isHighSeason(startsAt, seasons) : false;
+    const chargeableUnits = startsAt && endsAtExclusive ? calculateChargeableStayUnits(startsAt, endsAtExclusive) : 0;
+    const highSeasonUnits = startsAt && endsAtExclusive ? countHighSeasonStayUnits(startsAt, endsAtExclusive, seasons) : 0;
+    const hasHighSeason = highSeasonUnits > 0;
+    const priceOptions = { highSeasonSurchargePercent };
     const unitBaseCents = selectedRule && petCount
-      ? calculatePriceRuleUnitCents(selectedRule, petCount, highSeason)
+      ? calculatePriceRuleUnitCents(selectedRule, petCount, false, priceOptions)
+      : 0;
+    const highSeasonUnitBaseCents = selectedRule && petCount
+      ? calculatePriceRuleUnitCents(selectedRule, petCount, true, priceOptions)
       : 0;
     const automaticBaseCents = selectedRule && petCount && chargeableUnits
-      ? calculatePriceRuleBaseCents(selectedRule, petCount, highSeason, chargeableUnits)
+      ? calculatePriceRuleStayCents(selectedRule, petCount, chargeableUnits, highSeasonUnits, priceOptions)
       : 0;
-    const manualBaseRaw = String(formData.get("baseAmountCents") ?? "").trim();
-    const manualBaseCents = manualBaseRaw ? parseCurrencyToCents(manualBaseRaw) : null;
-    const baseAmountCents = manualBaseCents ?? automaticBaseCents;
+    const pricingMode = String(formData.get("pricingMode") ?? "fixed");
+    const manualDailyRaw = String(
+      formData.get("manualDailyAmountCents") ?? formData.get("baseAmountCents") ?? "",
+    ).trim();
+    const manualDailyCents = manualDailyRaw ? parseCurrencyToCents(manualDailyRaw) : null;
+    const manualBaseCents = manualDailyCents != null && chargeableUnits
+      ? calculateManualDailyBaseCents(manualDailyCents, chargeableUnits)
+      : null;
+    const baseAmountCents = pricingMode === "manual" && manualBaseCents != null
+      ? manualBaseCents
+      : automaticBaseCents;
     const distanceKm = parseDistanceKm(formData.get("distanceKm"));
     const pickupMode = String(formData.get("pickupMode") ?? "TUTOR_DROPS_OFF");
     const taxiRule = selectedRule && hasTaxiPricing(selectedRule)
@@ -140,17 +180,22 @@ export function ReservationPricingPreview({
       selectedRule,
       petCount,
       chargeableUnits,
-      highSeason,
+      highSeasonUnits,
+      hasHighSeason,
       unitBaseCents,
+      highSeasonUnitBaseCents,
       automaticBaseCents,
+      manualDailyCents,
+      manualBaseCents,
       baseAmountCents,
+      pricingMode,
       taxiRule,
       taxiPetCents,
       discountCents,
       additionalCents,
       ...totals,
     };
-  }, [depositPercent, seasons, serviceTypes, snapshot]);
+  }, [depositPercent, highSeasonSurchargePercent, seasons, serviceTypes, snapshot]);
 
   return (
     <div
@@ -171,6 +216,10 @@ export function ReservationPricingPreview({
           <strong>{summary.selectedRule ? `${summary.selectedRule.label} - ${summary.selectedRule.paymentMethod}` : "-"}</strong>
         </div>
         <div className="row row--between">
+          <span className="muted">Modo</span>
+          <strong>{summary.pricingMode === "manual" ? "Diaria manual" : "Valor fixado"}</strong>
+        </div>
+        <div className="row row--between">
           <span className="muted">Pets</span>
           <strong>{summary.petCount || "-"}</strong>
         </div>
@@ -182,6 +231,21 @@ export function ReservationPricingPreview({
           <span className="muted">Base por diaria</span>
           <span>{brl(summary.unitBaseCents)}</span>
         </div>
+        {summary.hasHighSeason ? (
+          <div className="row row--between">
+            <span className="muted">Alta temporada</span>
+            <span>
+              {summary.highSeasonUnits} diaria{summary.highSeasonUnits === 1 ? "" : "s"}
+              {summary.pricingMode === "fixed" ? ` - ${brl(summary.highSeasonUnitBaseCents)}/dia` : ""}
+            </span>
+          </div>
+        ) : null}
+        {summary.pricingMode === "manual" ? (
+          <div className="row row--between">
+            <span className="muted">Diaria manual</span>
+            <span>{summary.manualDailyCents != null ? brl(summary.manualDailyCents) : "-"}</span>
+          </div>
+        ) : null}
         <div className="row row--between">
           <span className="muted">Base da estadia</span>
           <strong>{brl(summary.baseAmountCents)}</strong>
@@ -190,12 +254,6 @@ export function ReservationPricingPreview({
           <span className="muted">Taxi pet</span>
           <strong>{brl(summary.taxiPetCents)}</strong>
         </div>
-        {summary.highSeason ? (
-          <div className="row row--between">
-            <span className="muted">Temporada</span>
-            <strong>Alta</strong>
-          </div>
-        ) : null}
         {summary.discountCents || summary.additionalCents ? (
           <>
             <div className="row row--between">

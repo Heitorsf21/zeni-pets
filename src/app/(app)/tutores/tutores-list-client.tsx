@@ -1,8 +1,8 @@
 "use client";
 
-import { GitMerge, Loader2, X } from "lucide-react";
+import { GitMerge, Loader2, Search, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   mergeTutoresManualmenteAction,
@@ -55,6 +55,17 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredQuery = useDeferredValue(searchQuery);
+
+  const filteredTutors = useMemo(() => {
+    const q = deferredQuery.trim().toLowerCase();
+    if (!q) return tutors;
+    return tutors.filter((tutor) =>
+      [tutor.name, tutor.phone, tutor.email, tutor.pets]
+        .some((field) => field && field.toLowerCase().includes(q))
+    );
+  }, [tutors, deferredQuery]);
 
   const toggle = useCallback((id: string) => {
     setSelected((current) => {
@@ -65,9 +76,21 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
     });
   }, []);
 
-  const allChecked = tutors.length > 0 && selected.size === tutors.length;
+  const allChecked = filteredTutors.length > 0 && filteredTutors.every((t) => selected.has(t.id));
   const toggleAll = () => {
-    setSelected(allChecked ? new Set() : new Set(tutors.map((t) => t.id)));
+    if (allChecked) {
+      setSelected((current) => {
+        const next = new Set(current);
+        filteredTutors.forEach((t) => next.delete(t.id));
+        return next;
+      });
+    } else {
+      setSelected((current) => {
+        const next = new Set(current);
+        filteredTutors.forEach((t) => next.add(t.id));
+        return next;
+      });
+    }
   };
 
   const clear = () => setSelected(new Set());
@@ -129,6 +152,25 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
 
   return (
     <>
+      <div className="row" style={{ gap: 8, alignItems: "center", padding: "0 16px 12px", flexWrap: "wrap" }}>
+        <label className="field" style={{ flex: 1, minWidth: 240, margin: 0 }}>
+          <span className="row" style={{ position: "relative", alignItems: "center" }}>
+            <Search style={{ position: "absolute", left: 10, width: 16, height: 16, color: "var(--muted)" }} />
+            <input
+              className="input"
+              type="search"
+              placeholder="Buscar por nome, telefone, e-mail ou pet"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              style={{ paddingLeft: 32, width: "100%" }}
+            />
+          </span>
+        </label>
+        <span className="subtle" style={{ fontSize: 12 }}>
+          {filteredTutors.length} de {tutors.length} {tutors.length === 1 ? "tutor" : "tutores"}
+        </span>
+      </div>
+
       {selected.size >= 2 ? (
         <div className="alert" role="status" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface)", borderColor: "var(--border)" }}>
           <div>
@@ -144,8 +186,8 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
         </div>
       ) : null}
 
-      <div className="card__body card__body--flush">
-        <table className="table">
+      <div className="card__body card__body--flush" style={{ overflowX: "auto" }}>
+        <table className="table" style={{ minWidth: 960 }}>
           <thead>
             <tr>
               <th style={{ width: 36 }}>
@@ -166,7 +208,14 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {tutors.map((tutor) => (
+            {filteredTutors.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="muted" style={{ textAlign: "center", padding: 24 }}>
+                  Nenhum tutor encontrado.
+                </td>
+              </tr>
+            ) : null}
+            {filteredTutors.map((tutor) => (
               <tr key={tutor.id} style={selected.has(tutor.id) ? { background: "var(--surface-2, #f5f7fb)" } : undefined}>
                 <td>
                   <input

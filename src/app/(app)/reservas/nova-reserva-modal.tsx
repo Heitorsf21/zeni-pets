@@ -4,12 +4,13 @@ import { Plus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import type { ReservationSeasonOption, ReservationServiceOption } from "@/lib/reservation-form-options";
 import { createReservationAction } from "./actions";
+import { ReservationPeriodFields } from "./reservation-period-fields";
 import { ReservationPetFields } from "./reservation-pet-fields";
 import { ReservationPricingPreview } from "./reservation-pricing-preview";
 import { ReservationTaskFields } from "./reservation-task-fields";
 import { ServicePriceRuleFields } from "./service-price-rule-fields";
 
-type Tutor = { id: string; name: string };
+type Tutor = { id: string; name: string; phone?: string | null; email?: string | null };
 type Pet = { id: string; name: string; tutor: { id: string; name: string } };
 type Props = {
   tutors: Tutor[];
@@ -52,14 +53,7 @@ export function NovaReservaModal({
           defaultPetId={defaultPetId}
         />
         <ServicePriceRuleFields serviceTypes={serviceTypes} />
-        <label className="field">
-          <span className="field__label">Check-in</span>
-          <input className="input" name="startsAt" type="datetime-local" required />
-        </label>
-        <label className="field">
-          <span className="field__label">Check-out</span>
-          <input className="input" name="endsAt" type="datetime-local" required />
-        </label>
+        <ReservationPeriodFields serviceTypes={serviceTypes} />
         <label className="field">
           <span className="field__label">Retirada</span>
           <select className="select" name="pickupMode" defaultValue="TUTOR_DROPS_OFF">

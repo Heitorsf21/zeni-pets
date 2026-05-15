@@ -10,11 +10,16 @@ type Pet = {
   species: string | null;
   breed: string | null;
   ageLabel: string | null;
+  ageReferenceYear: number | null;
   isNeutered: boolean | null;
   isSociable: boolean | null;
   foodNotes: string | null;
+  foodRestrictions: string | null;
+  foodTreats: string | null;
   healthNotes: string | null;
   behaviorNotes: string | null;
+  historyNotes: string | null;
+  attentionNotes: string | null;
   vetName: string | null;
   vetPhone: string | null;
   deliveredItems: string | null;
@@ -65,8 +70,22 @@ export function EditarPetModal({
           <input className="input" name="breed" defaultValue={pet.breed ?? ""} />
         </label>
         <label className="field">
-          <span className="field__label">Idade</span>
-          <input className="input" name="ageLabel" defaultValue={pet.ageLabel ?? ""} />
+          <span className="field__label">Idade aproximada (anos)</span>
+          <input
+            className="input"
+            name="ageLabel"
+            type="number"
+            min={0}
+            max={40}
+            step={1}
+            inputMode="numeric"
+            defaultValue={pet.ageLabel?.match(/(\d+)/)?.[1] ?? ""}
+          />
+          {pet.ageReferenceYear ? (
+            <span className="subtle" style={{ fontSize: 11 }}>
+              Idade registrada em {pet.ageReferenceYear}
+            </span>
+          ) : null}
         </label>
         <div className="row" style={{ gridColumn: "1 / -1" }}>
           <label className="check">
@@ -77,8 +96,16 @@ export function EditarPetModal({
           </label>
         </div>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Alimentação</span>
+          <span className="field__label">Rotina alimentar</span>
           <textarea className="textarea" name="foodNotes" defaultValue={pet.foodNotes ?? ""} />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Restrições alimentares</span>
+          <textarea className="textarea" name="foodRestrictions" defaultValue={pet.foodRestrictions ?? ""} />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Petiscos</span>
+          <textarea className="textarea" name="foodTreats" defaultValue={pet.foodTreats ?? ""} />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Saúde</span>
@@ -87,6 +114,14 @@ export function EditarPetModal({
         <label className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Comportamento</span>
           <textarea className="textarea" name="behaviorNotes" defaultValue={pet.behaviorNotes ?? ""} />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Histórico (observações livres)</span>
+          <textarea className="textarea" name="historyNotes" defaultValue={pet.historyNotes ?? ""} />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Pontos de atenção</span>
+          <textarea className="textarea" name="attentionNotes" defaultValue={pet.attentionNotes ?? ""} />
         </label>
         <label className="field">
           <span className="field__label">Veterinário</span>

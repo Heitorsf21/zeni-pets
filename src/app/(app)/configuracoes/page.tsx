@@ -1,8 +1,8 @@
-import { CalendarDays, CalendarRange, Settings } from "lucide-react";
+import { CalendarDays, CalendarRange } from "lucide-react";
 import Link from "next/link";
 import { Topbar } from "@/components/layout/topbar";
 import { FlashMessage } from "@/components/ui/flash-message";
-import { getConfigData, getServicePriceRows } from "@/lib/app-data";
+import { getConfigData } from "@/lib/app-data";
 import { formatDateShort, formatDateTimeShort } from "@/lib/date";
 import {
   disconnectGoogleCalendarAction,
@@ -18,12 +18,12 @@ export default async function ConfiguracoesPage({
   searchParams?: Promise<{ error?: string; saved?: string; google?: string; synced?: string; failed?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
-  const [config, servicePrices] = await Promise.all([getConfigData(), getServicePriceRows()]);
+  const config = await getConfigData();
   const settings = config.settings;
 
   return (
     <>
-      <Topbar title="Configurações" subtitle="Serviços, valores, calendário e dados da empresa" />
+      <Topbar title="Configurações" subtitle="Empresa, capacidade, Google Agenda e temporadas" />
       {(sp.error || sp.saved || sp.google) ? (
         <div className="content stack" style={{ paddingBottom: 0 }}>
           <FlashMessage error={sp.error} saved={sp.saved} google={sp.google} />
@@ -31,38 +31,6 @@ export default async function ConfiguracoesPage({
       ) : null}
       <div className="content page-grid">
         <section className="stack">
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <div className="card__title"><Settings /> Tipos de servico</div>
-                <div className="card__subtitle">Valores operacionais limpos do MVP</div>
-              </div>
-              <Link className="btn" href="/configuracoes/servicos"><Settings /> Gerenciar</Link>
-            </div>
-            <div className="card__body card__body--flush">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Serviço</th>
-                    <th>Detalhes</th>
-                    <th>PIX</th>
-                    <th>Cartão</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {servicePrices.map((service) => (
-                    <tr key={service.id}>
-                      <td>{service.name}</td>
-                      <td className="muted">{service.detail}</td>
-                      <td>{service.pix}</td>
-                      <td>{service.card}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           <div className="card" id="dados-empresa">
             <div className="card__header">
               <div>

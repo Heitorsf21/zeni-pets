@@ -7,6 +7,7 @@ import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import {
   CalendarClock,
   CalendarDays,
+  DollarSign,
   LayoutDashboard,
   LogOut,
   PanelLeftClose,
@@ -27,6 +28,7 @@ const nav = [
   { href: "/tutores", id: "tutores", label: "Tutores", icon: Users },
   { href: "/pets", id: "pets", label: "Pets", icon: PawPrint },
   { href: "/financeiro", id: "financeiro", label: "Financeiro", icon: Wallet },
+  { href: "/valores", id: "valores", label: "Valores", icon: DollarSign },
 ];
 
 const systemNav = [

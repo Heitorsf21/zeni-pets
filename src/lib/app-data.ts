@@ -10,7 +10,10 @@ import {
   endOfDay,
   endOfMonth,
   formatDateShort,
+  formatDateOnly,
   formatDateTimeShort,
+  formatReservationPeriod,
+  reservationEndDay,
   startOfDay,
   startOfMonth,
 } from "@/lib/date";
@@ -149,8 +152,10 @@ export async function getPetsData() {
       id: pet.id,
       name: pet.name,
       tutor: pet.tutor.name,
+      tutorId: pet.tutor.id,
       breed: pet.breed ?? "Sem raça definida",
-      age: pet.ageLabel ?? "-",
+      ageLabel: pet.ageLabel,
+      ageReferenceYear: pet.ageReferenceYear,
       neutered: Boolean(pet.isNeutered),
       sociable: Boolean(pet.isSociable),
       status:
@@ -248,7 +253,7 @@ export async function getReservationsByMonthData(year: number, month: number) {
       tutor: reservation.tutor.name,
       type: reservation.serviceType.name,
       pets: reservation.reservationPets.map((item) => item.pet.name).join(", "),
-      period: `${formatDateTimeShort(reservation.startsAt)} - ${formatDateTimeShort(reservation.endsAt)}`,
+      period: formatReservationPeriod(reservation.startsAt, reservation.endsAt),
       status: reservation.status,
       payment: reservation.paymentStatus,
       value: brl(reservation.totalCents),
@@ -281,7 +286,7 @@ export async function getUpcomingReservationsData(daysAhead = 14) {
       tutor: reservation.tutor.name,
       type: reservation.serviceType.name,
       pets: reservation.reservationPets.map((item) => item.pet.name).join(", "),
-      period: `${formatDateTimeShort(reservation.startsAt)} - ${formatDateTimeShort(reservation.endsAt)}`,
+      period: formatReservationPeriod(reservation.startsAt, reservation.endsAt),
       status: reservation.status,
       payment: reservation.paymentStatus,
       value: brl(reservation.totalCents),
@@ -380,7 +385,7 @@ export async function getReservationsListData(filters: ReservationListFilters = 
         tutorId: reservation.tutor.id,
         type: reservation.serviceType.name,
         pets: reservation.reservationPets.map((item) => item.pet.name).join(", "),
-        period: `${formatDateTimeShort(reservation.startsAt)} - ${formatDateTimeShort(reservation.endsAt)}`,
+        period: formatReservationPeriod(reservation.startsAt, reservation.endsAt),
         status: reservation.status,
         payment: reservation.paymentStatus,
         value: brl(reservation.totalCents),
@@ -545,7 +550,7 @@ async function getUpcomingPetSitterVisitsData() {
     id: reservation.id,
     pet: reservation.reservationPets.map((item) => item.pet.name).join(", ") || "Sem pet vinculado",
     tutor: reservation.tutor.name,
-    time: formatDateTimeShort(reservation.startsAt),
+    time: formatDateOnly(reservation.startsAt),
   }));
 }
 
@@ -567,6 +572,7 @@ export async function getDashboardData() {
       monthlyRevenue,
       tasks,
       petSitterVisits,
+      birthdayTutors,
     ] =
       await Promise.all([
         getPrisma().businessSettings.findUnique({ where: { singletonKey: "default" } }),
@@ -600,6 +606,7 @@ export async function getDashboardData() {
         getMonthlyRevenueData(today),
         getTodayTasksData(today),
         getUpcomingPetSitterVisitsData(),
+        getTodayBirthdayTutorsData(today),
       ]);
 
     const hostedPets = activeReservations
@@ -610,7 +617,7 @@ export async function getDashboardData() {
           breed: item.pet.breed ?? item.pet.ageLabel ?? "Ficha pendente",
           tutor: reservation.tutor.name,
           checkIn: formatDateShort(reservation.startsAt),
-          checkOut: formatDateShort(reservation.endsAt),
+          checkOut: formatDateShort(reservationEndDay(reservation.endsAt)),
           status: reservation.status,
           id: reservation.id,
         })),
@@ -661,6 +668,7 @@ export async function getDashboardData() {
       monthlyRevenue,
       tasks,
       petSitterVisits,
+      birthdayTutors,
     };
   } catch (error) {
     dbUnavailable("dashboard", error);
@@ -689,7 +697,40 @@ export async function getDashboardData() {
       monthlyRevenue: emptyMonthlyRevenue(today),
       tasks: [],
       petSitterVisits: [],
+      birthdayTutors: [] as Array<{ id: string; name: string; phone: string | null; email: string | null; yearsCompleted: number | null }>,
     };
+  }
+}
+
+export async function getTodayBirthdayTutorsData(now: Date = new Date()) {
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  try {
+    const tutors = await getPrisma().tutor.findMany({
+      where: { birthDate: { not: null }, status: "ACTIVE" },
+      select: { id: true, name: true, phone: true, email: true, birthDate: true },
+    });
+    return tutors
+      .filter((tutor) => {
+        if (!tutor.birthDate) return false;
+        return tutor.birthDate.getMonth() + 1 === month && tutor.birthDate.getDate() === day;
+      })
+      .map((tutor) => {
+        const yearsCompleted = tutor.birthDate
+          ? Math.max(now.getFullYear() - tutor.birthDate.getFullYear(), 0)
+          : null;
+        return {
+          id: tutor.id,
+          name: tutor.name,
+          phone: tutor.phone ?? null,
+          email: tutor.email ?? null,
+          yearsCompleted,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (error) {
+    dbUnavailable("birthday tutors", error);
+    return [];
   }
 }
 
@@ -713,7 +754,7 @@ export async function getUpcomingServicesData() {
 
     return reservations.map((reservation) => ({
       id: reservation.id,
-      time: formatDateTimeShort(reservation.startsAt),
+      time: formatDateOnly(reservation.startsAt),
       label: `${reservation.serviceType.name} - ${reservation.reservationPets.map((item) => item.pet.name).join(", ")}`,
       sub: `${reservation.tutor.name} - ${brl(reservation.totalCents)}`,
       kind: reservation.serviceType.kind === "DAYCARE" ? "day" : "in",

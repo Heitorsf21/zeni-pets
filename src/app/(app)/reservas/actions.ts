@@ -7,9 +7,10 @@ import { requireUser } from "@/lib/auth";
 import { getTutorCreditBalance } from "@/lib/credits";
 import { getPrisma } from "@/lib/db";
 import { centsField, centsFieldStrict, optionalStringField, selectedValues, stringField } from "@/lib/forms";
-import { parseDatetimeLocal } from "@/lib/date";
+import { addDays, parseDateOnly } from "@/lib/date";
 import {
-  calculatePriceRuleBaseCents,
+  calculateManualDailyBaseCents,
+  calculatePriceRuleStayCents,
   hasTaxiPricing,
   selectDefaultPriceRule,
   selectDefaultTaxiRule,
@@ -17,10 +18,9 @@ import {
 import { deriveInitialReservationStatus, derivePaymentStatus, sumPaidCents } from "@/lib/reservation-status";
 import {
   calculateChargeableStayUnits,
-  calculateLateFeeCents,
+  countHighSeasonStayUnits,
   calculateReservationTotals,
   calculateTaxiPetCents,
-  isHighSeason,
 } from "@/lib/rules";
 import { generateTaskOccurrenceDates } from "@/lib/tasks";
 
@@ -108,8 +108,9 @@ async function calculateBaseAmount(input: {
   const rule = ruleFromDirectSelection ?? selectDefaultPriceRule(serviceType?.priceRules ?? []);
   if (!rule) return { ok: false as const, reason: "preco-nao-configurado" };
 
-  const highSeason = isHighSeason(input.startsAt, seasons);
   const chargeableUnits = calculateChargeableStayUnits(input.startsAt, input.endsAt);
+  const highSeasonUnits = countHighSeasonStayUnits(input.startsAt, input.endsAt, seasons);
+  const highSeasonSurchargePercent = settings?.highSeasonSurchargePercent ?? 0;
 
   return {
     ok: true as const,
@@ -117,7 +118,14 @@ async function calculateBaseAmount(input: {
     priceRule: rule,
     pricingPaymentMethod: rule.paymentMethod,
     chargeableUnits,
-    baseAmountCents: calculatePriceRuleBaseCents(rule, input.petCount, highSeason, chargeableUnits),
+    highSeasonUnits,
+    baseAmountCents: calculatePriceRuleStayCents(
+      rule,
+      input.petCount,
+      chargeableUnits,
+      highSeasonUnits,
+      { highSeasonSurchargePercent },
+    ),
     taxiRule: hasTaxiPricing(rule) ? rule : selectDefaultTaxiRule(taxiServiceTypes),
     settings,
   };
@@ -159,8 +167,8 @@ function reservationTaskDrafts(formData: FormData, input: {
       redirect("/nova-reserva?error=tarefa-pet-obrigatorio");
     }
 
-    const taskDate = parseDatetimeLocal(taskDates[index] ?? null) ?? input.startsAt;
-    const endsAt = parseDatetimeLocal(taskEndsAt[index] ?? null);
+    const taskDate = parseDateOnly(taskDates[index] ?? null) ?? input.startsAt;
+    const endsAt = parseDateOnly(taskEndsAt[index] ?? null);
     if (endsAt && endsAt.getTime() < taskDate.getTime()) {
       redirect("/nova-reserva?error=datas-invalidas");
     }
@@ -175,14 +183,26 @@ function reservationTaskDrafts(formData: FormData, input: {
   });
 }
 
+function parseReservationPeriod(formData: FormData): { startsAt: Date | null; endsAt: Date | null } {
+  const visitRaw = stringField(formData, "visitDate");
+  if (visitRaw) {
+    const visit = parseDateOnly(visitRaw);
+    if (!visit) return { startsAt: null, endsAt: null };
+    return { startsAt: visit, endsAt: addDays(visit, 1) };
+  }
+  const start = parseDateOnly(formData.get("startsAt"));
+  const endInclusive = parseDateOnly(formData.get("endsAt"));
+  if (!start || !endInclusive) return { startsAt: null, endsAt: null };
+  return { startsAt: start, endsAt: addDays(endInclusive, 1) };
+}
+
 export async function createReservationAction(formData: FormData) {
   await requireUser();
   const tutorId = stringField(formData, "tutorId");
   const serviceTypeId = stringField(formData, "serviceTypeId");
   const priceRuleId = stringField(formData, "priceRuleId");
   const petIds = Array.from(new Set(selectedValues(formData, "petIds")));
-  const startsAt = parseDatetimeLocal(formData.get("startsAt"));
-  const endsAt = parseDatetimeLocal(formData.get("endsAt"));
+  const { startsAt, endsAt } = parseReservationPeriod(formData);
 
   if (!tutorId || (!serviceTypeId && !priceRuleId) || !petIds.length || !startsAt || !endsAt) {
     redirect("/nova-reserva?error=dados-obrigatorios");
@@ -226,14 +246,17 @@ export async function createReservationAction(formData: FormData) {
     distanceKm,
   });
 
-  // Use strict parsing for the headline value: empty falls back to the rule price,
-  // but unparseable text (e.g. user typed "abc") rejects the form instead of saving 0.
-  const baseRaw = stringField(formData, "baseAmountCents");
-  const baseAmountCents = baseRaw
-    ? centsFieldStrict(formData, "baseAmountCents")
+  const pricingMode = stringField(formData, "pricingMode");
+  const manualDailyRaw = stringField(formData, "manualDailyAmountCents") || stringField(formData, "baseAmountCents");
+  const useManualPricing = pricingMode === "manual" || (!pricingMode && Boolean(manualDailyRaw));
+  const manualDailyCents = manualDailyRaw ? centsFieldStrict(formData, "manualDailyAmountCents") ?? centsFieldStrict(formData, "baseAmountCents") : null;
+  const baseAmountCents = useManualPricing
+    ? manualDailyCents == null
+      ? null
+      : calculateManualDailyBaseCents(manualDailyCents, base.chargeableUnits)
     : base.baseAmountCents;
   if (baseAmountCents == null) {
-    redirect("/nova-reserva?error=valor-base-invalido");
+    redirect("/nova-reserva?error=valor-diaria-manual-invalido");
   }
 
   const discountCents = centsField(formData, "discountCents", 0);
@@ -352,52 +375,154 @@ export async function updateReservationStatusAction(
   revalidatePath(`/reservas/${id}`);
 }
 
-export async function concludeWithLateFeeAction(id: string, formData: FormData) {
+export async function updateReservationAction(id: string, formData: FormData) {
   await requireUser();
-  const actualEndedAt = parseDatetimeLocal(formData.get("actualEndedAt")) ?? new Date();
-  const reservation = await getPrisma().reservation.findUnique({
-    where: { id },
-    include: { reservationPets: true, payments: true },
-  });
-  if (!reservation) redirect("/agenda?error=reserva-nao-encontrada");
+  const tutorId = stringField(formData, "tutorId");
+  const serviceTypeId = stringField(formData, "serviceTypeId");
+  const priceRuleId = stringField(formData, "priceRuleId");
+  const petIds = Array.from(new Set(selectedValues(formData, "petIds")));
+  const { startsAt, endsAt } = parseReservationPeriod(formData);
 
-  const settings = await getPrisma().businessSettings.findUnique({
-    where: { singletonKey: "default" },
+  if (!tutorId || (!serviceTypeId && !priceRuleId) || !petIds.length || !startsAt || !endsAt) {
+    redirect(`/reservas/${id}/editar?error=dados-obrigatorios`);
+  }
+  if (endsAt.getTime() <= startsAt.getTime()) {
+    redirect(`/reservas/${id}/editar?error=datas-invalidas`);
+  }
+
+  const pets = await getPrisma().pet.findMany({
+    where: { id: { in: petIds } },
+    select: { id: true, tutorId: true },
   });
-  const lateFeeCents = calculateLateFeeCents({
-    scheduledEnd: reservation.endsAt,
-    actualEnd: actualEndedAt,
-    petCount: reservation.reservationPets.length,
-    onePetHourlyCents: settings?.lateFeeOnePetCents ?? 1000,
-    manyPetsHourlyCents: settings?.lateFeeManyPetsCents ?? 1500,
+  if (pets.length !== petIds.length || pets.some((pet) => pet.tutorId !== tutorId)) {
+    redirect(`/reservas/${id}/editar?error=pets-do-tutor`);
+  }
+
+  const pickupMode = stringField(formData, "pickupMode") === "ZENI_PICKUP" ? "ZENI_PICKUP" : "TUTOR_DROPS_OFF";
+  const base = await calculateBaseAmount({
+    serviceTypeId,
+    priceRuleId,
+    petCount: petIds.length,
+    startsAt,
+    endsAt,
   });
+  if (!base.ok) redirect(`/reservas/${id}/editar?error=${base.reason}`);
+
+  const distanceKm = distanceKmField(formData, "distanceKm");
+  if (distanceKm == null) {
+    redirect(`/reservas/${id}/editar?error=distancia-invalida`);
+  }
+
+  const taxiPetCents = calculateTaxiPetCents({
+    pickupMode,
+    fixedFeeCents: base.taxiRule?.fixedFeeCents ?? 0,
+    perKmCents: base.taxiRule?.perKmCents ?? 0,
+    hygieneFeeCents: base.taxiRule?.hygieneFeeCents ?? 0,
+    distanceKm,
+  });
+
+  const pricingMode = stringField(formData, "pricingMode");
+  const manualDailyRaw = stringField(formData, "manualDailyAmountCents") || stringField(formData, "baseAmountCents");
+  const useManualPricing = pricingMode === "manual" || (!pricingMode && Boolean(manualDailyRaw));
+  const manualDailyCents = manualDailyRaw
+    ? centsFieldStrict(formData, "manualDailyAmountCents") ?? centsFieldStrict(formData, "baseAmountCents")
+    : null;
+  const baseAmountCents = useManualPricing
+    ? manualDailyCents == null
+      ? null
+      : calculateManualDailyBaseCents(manualDailyCents, base.chargeableUnits)
+    : base.baseAmountCents;
+  if (baseAmountCents == null) {
+    redirect(`/reservas/${id}/editar?error=valor-diaria-manual-invalido`);
+  }
+
+  const discountCents = centsField(formData, "discountCents", 0);
+  const additionalCents = centsField(formData, "additionalCents", 0);
+
+  const existing = await getPrisma().reservation.findUnique({
+    where: { id },
+    include: { reservationPets: true, payments: true, tasks: true, tutor: true },
+  });
+  if (!existing) redirect("/reservas?error=reserva-nao-encontrada");
+
   const totals = calculateReservationTotals({
-    baseAmountCents: reservation.baseAmountCents,
-    discountCents: reservation.discountCents,
-    additionalCents: reservation.additionalCents,
-    taxiPetCents: reservation.taxiPetCents,
-    lateFeeCents,
-    depositPercent: settings?.depositPercent ?? 50,
+    baseAmountCents,
+    discountCents,
+    additionalCents,
+    taxiPetCents,
+    lateFeeCents: existing.lateFeeCents,
+    depositPercent: base.settings?.depositPercent ?? 50,
   });
 
-  await getPrisma().reservation.update({
-    where: { id },
-    data: {
-      status: "COMPLETED",
-      actualEndedAt,
-      lateFeeCents,
-      totalCents: totals.totalCents,
-      depositSuggestedCents: totals.depositSuggestedCents,
-      depositDueCents: totals.depositDueCents,
-      balanceDueCents: totals.balanceDueCents,
-      paymentStatus: derivePaymentStatus(sumPaidCents(reservation.payments), totals.totalCents),
-    },
+  const previousPetIds = existing.reservationPets.map((rp) => rp.petId);
+  const previousTutorId = existing.tutorId;
+
+  await getPrisma().$transaction(async (tx) => {
+    await tx.reservation.update({
+      where: { id },
+      data: {
+        tutorId,
+        serviceTypeId: base.serviceTypeId,
+        priceRuleId: base.priceRule.id,
+        pricingPaymentMethod: base.pricingPaymentMethod,
+        pickupMode,
+        startsAt,
+        endsAt,
+        notes: optionalStringField(formData, "notes"),
+        inviteTutor: formData.get("inviteTutor") === "on",
+        baseAmountCents,
+        discountCents,
+        additionalCents,
+        taxiPetCents,
+        totalCents: totals.totalCents,
+        depositSuggestedCents: totals.depositSuggestedCents,
+        depositDueCents: totals.depositDueCents,
+        balanceDueCents: totals.balanceDueCents,
+        paymentStatus: derivePaymentStatus(sumPaidCents(existing.payments), totals.totalCents),
+      },
+    });
+
+    const removedPetIds = previousPetIds.filter((petId) => !petIds.includes(petId));
+    const addedPetIds = petIds.filter((petId) => !previousPetIds.includes(petId));
+    if (removedPetIds.length) {
+      await tx.reservationPet.deleteMany({
+        where: { reservationId: id, petId: { in: removedPetIds } },
+      });
+    }
+    if (addedPetIds.length) {
+      await tx.reservationPet.createMany({
+        data: addedPetIds.map((petId) => ({ reservationId: id, petId, priceRole: "additional_pet" })),
+        skipDuplicates: true,
+      });
+    }
+    // Reassign priceRole based on the new selection order so the first pet is always "first_pet".
+    for (let index = 0; index < petIds.length; index++) {
+      await tx.reservationPet.updateMany({
+        where: { reservationId: id, petId: petIds[index] },
+        data: { priceRole: index === 0 ? "first_pet" : "additional_pet" },
+      });
+    }
   });
+
+  await syncReservationToGoogleIfConfigured(id);
 
   revalidatePath("/dashboard");
   revalidatePath("/agenda");
   revalidatePath("/financeiro");
+  revalidatePath("/reservas");
   revalidatePath(`/reservas/${id}`);
+  revalidatePath(`/tutores/${tutorId}`);
+  revalidatePath(`/tutores/${tutorId}/ficha`);
+  if (previousTutorId && previousTutorId !== tutorId) {
+    revalidatePath(`/tutores/${previousTutorId}`);
+    revalidatePath(`/tutores/${previousTutorId}/ficha`);
+  }
+  const touchedPets = new Set([...previousPetIds, ...petIds]);
+  for (const petId of touchedPets) {
+    revalidatePath(`/pets/${petId}`);
+    revalidatePath(`/pets/${petId}/ficha`);
+  }
+  redirect(`/reservas/${id}?saved=1`);
 }
 
 export async function registerPaymentAction(id: string, formData: FormData) {

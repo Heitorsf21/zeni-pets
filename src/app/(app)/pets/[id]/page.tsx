@@ -19,7 +19,8 @@ import { FlashMessage } from "@/components/ui/flash-message";
 import { ConfirmForm } from "@/components/ui/confirm-form";
 import { Tabs } from "@/components/ui/tabs";
 import { getPetDetailData, getPetTasksData, getReservationFormData } from "@/lib/app-data";
-import { formatDateShort, formatDateTimeShort } from "@/lib/date";
+import { formatDateOnly, formatDateShort, formatReservationPeriod } from "@/lib/date";
+import { displayPetAge } from "@/lib/pet-age";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { calculateChargeableStayUnits } from "@/lib/rules";
 import { deletePetAction, updatePetAction } from "../actions";
@@ -78,6 +79,7 @@ export default async function PetDetailPage({
     { id: "historico", label: "Histórico", href: tabHref("historico") },
   ];
 
+  const ageDisplay = displayPetAge({ ageLabel: pet.ageLabel, ageReferenceYear: pet.ageReferenceYear });
   const editPetModal = (
     <EditarPetModal
       pet={{
@@ -86,11 +88,16 @@ export default async function PetDetailPage({
         species: pet.species,
         breed: pet.breed,
         ageLabel: pet.ageLabel,
+        ageReferenceYear: pet.ageReferenceYear,
         isNeutered: pet.isNeutered,
         isSociable: pet.isSociable,
         foodNotes: pet.foodNotes,
+        foodRestrictions: pet.foodRestrictions,
+        foodTreats: pet.foodTreats,
         healthNotes: pet.healthNotes,
         behaviorNotes: pet.behaviorNotes,
+        historyNotes: pet.historyNotes,
+        attentionNotes: pet.attentionNotes,
         vetName: pet.vetName,
         vetPhone: pet.vetPhone,
         deliveredItems: pet.deliveredItems,
@@ -110,13 +117,13 @@ export default async function PetDetailPage({
             {pet.name}
           </>
         }
-        subtitle={`${pet.breed || "Raça pendente"} - ${pet.ageLabel || "idade pendente"} - Tutor: ${pet.tutor.name}`}
+        subtitle={`${pet.breed || "Raça pendente"} - ${ageDisplay} - Tutor: ${pet.tutor.name}`}
         actions={
           <>
             <Link className="btn" href="/pets"><ArrowLeft /> Voltar</Link>
             {editPetModal}
             <NovaReservaModal
-              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
+              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name, phone: t.phone, email: t.email }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
               serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
               seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
@@ -146,7 +153,7 @@ export default async function PetDetailPage({
                     )}
                   </div>
                   <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                    {pet.breed || "Raça pendente"} - {pet.ageLabel || "idade pendente"}
+                    {pet.breed || "Raça pendente"} - {ageDisplay}
                   </div>
                   <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                     <span className="badge badge--ativo">{pet.isNeutered ? "Castrado" : "Não castrado"}</span>
@@ -249,12 +256,16 @@ export default async function PetDetailPage({
               <section className="card">
                 <div className="card__header">
                   <div className="card__title"><Soup /> Alimentação</div>
+                  {editPetModal}
                 </div>
                 <div className="card__body">
-                  <dl className="kv" style={{ gridTemplateColumns: "110px 1fr" }}>
-                    <dt>Rotina</dt><dd>{pet.foodNotes || "Sem rotina cadastrada."}</dd>
-                    <dt>Restrições</dt><dd className="muted">Registrar no campo de observações da ficha.</dd>
-                    <dt>Petiscos</dt><dd className="muted">Conferir com o tutor antes de liberar.</dd>
+                  <dl className="kv" style={{ gridTemplateColumns: "130px 1fr", rowGap: 10 }}>
+                    <dt>Rotina</dt>
+                    <dd style={{ whiteSpace: "pre-wrap" }}>{pet.foodNotes || <span className="muted">Sem rotina cadastrada.</span>}</dd>
+                    <dt>Restrições</dt>
+                    <dd style={{ whiteSpace: "pre-wrap" }}>{pet.foodRestrictions || <span className="muted">Nenhuma restrição registrada.</span>}</dd>
+                    <dt>Petiscos</dt>
+                    <dd style={{ whiteSpace: "pre-wrap" }}>{pet.foodTreats || <span className="muted">Conferir com o tutor antes de liberar.</span>}</dd>
                   </dl>
                 </div>
               </section>
@@ -287,42 +298,55 @@ export default async function PetDetailPage({
             ) : null}
 
             {tab === "historico" ? (
-              <section className="card">
-                <div className="card__header">
-                  <div>
-                    <div className="card__title"><CalendarDays /> Estadias recentes</div>
-                    <div className="card__subtitle">{reservations.length} reservas vinculadas</div>
+              <>
+                {pet.historyNotes ? (
+                  <section className="card">
+                    <div className="card__header">
+                      <div className="card__title">Observações livres</div>
+                      {editPetModal}
+                    </div>
+                    <div className="card__body" style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+                      {pet.historyNotes}
+                    </div>
+                  </section>
+                ) : null}
+                <section className="card">
+                  <div className="card__header">
+                    <div>
+                      <div className="card__title"><CalendarDays /> Estadias recentes</div>
+                      <div className="card__subtitle">{reservations.length} reservas vinculadas</div>
+                    </div>
                   </div>
-                </div>
-                <div className="card__body card__body--flush">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Data</th>
-                        <th>Tipo</th>
-                        <th>Noites</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reservations.length ? reservations.slice(0, 6).map((reservation) => (
-                        <tr key={reservation.id}>
-                          <td className="mono" style={{ fontSize: 12 }}>
-                            {formatDateTimeShort(reservation.startsAt)} - {formatDateTimeShort(reservation.endsAt)}
-                          </td>
-                          <td><Link href={`/reservas/${reservation.id}`}>{reservation.serviceType.name}</Link></td>
-                          <td className="mono">{calculateChargeableStayUnits(reservation.startsAt, reservation.endsAt)}</td>
-                          <td><StatusBadge status={reservation.status} /></td>
-                        </tr>
-                      )) : (
+                  <div className="card__body card__body--flush">
+                    <table className="table">
+                      <thead>
                         <tr>
-                          <td colSpan={4} className="muted">Nenhuma reserva vinculada ainda.</td>
+                          <th>Data</th>
+                          <th>Tipo</th>
+                          <th>Diárias</th>
+                          <th>Status</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                      </thead>
+                      <tbody>
+                        {reservations.length ? reservations.slice(0, 6).map((reservation) => (
+                          <tr key={reservation.id}>
+                            <td className="mono" style={{ fontSize: 12 }}>
+                              {formatReservationPeriod(reservation.startsAt, reservation.endsAt)}
+                            </td>
+                            <td><Link href={`/reservas/${reservation.id}`}>{reservation.serviceType.name}</Link></td>
+                            <td className="mono">{calculateChargeableStayUnits(reservation.startsAt, reservation.endsAt)}</td>
+                            <td><StatusBadge status={reservation.status} /></td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan={4} className="muted">Nenhuma reserva vinculada ainda.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </>
             ) : null}
 
           </main>
@@ -359,11 +383,15 @@ export default async function PetDetailPage({
                 <div className="card__title"><AlertCircle /> Atenção</div>
               </div>
               <div className="card__body" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-                  <li>{pet.healthNotes ? "Conferir observações de saúde" : "Saúde sem alertas cadastrados"}</li>
-                  <li>{pet.behaviorNotes ? "Ler comportamento antes do manejo" : "Comportamento sem alertas cadastrados"}</li>
-                  <li>{pet.deliveredItems ? "Conferir itens na entrada e saída" : "Nenhum item entregue registrado"}</li>
-                </ul>
+                {pet.attentionNotes ? (
+                  <p style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{pet.attentionNotes}</p>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+                    <li>{pet.healthNotes ? "Conferir observações de saúde" : "Saúde sem alertas cadastrados"}</li>
+                    <li>{pet.behaviorNotes ? "Ler comportamento antes do manejo" : "Comportamento sem alertas cadastrados"}</li>
+                    <li>{pet.deliveredItems ? "Conferir itens na entrada e saída" : "Nenhum item entregue registrado"}</li>
+                  </ul>
+                )}
               </div>
             </section>
 
@@ -387,7 +415,7 @@ export default async function PetDetailPage({
               </div>
               <div className="card__body stack" style={{ gap: 8 }}>
                 <NovaReservaModal
-                  tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
+                  tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name, phone: t.phone, email: t.email }))}
                   pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
                   serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
                   seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}

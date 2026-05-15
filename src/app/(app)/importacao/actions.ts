@@ -57,7 +57,7 @@ function revalidateImportTargets() {
   revalidatePath("/pets");
   revalidatePath("/reservas");
   revalidatePath("/financeiro");
-  revalidatePath("/configuracoes/servicos");
+  revalidatePath("/valores");
 }
 
 async function importRecordTransaction(id: string): Promise<ImportAttemptResult> {

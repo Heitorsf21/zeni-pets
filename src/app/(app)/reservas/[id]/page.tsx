@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, CreditCard, Flag, ListChecks, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarClock, CreditCard, Edit, Flag, ListChecks, XCircle } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Topbar } from "@/components/layout/topbar";
@@ -7,13 +7,12 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { ConfirmForm } from "@/components/ui/confirm-form";
 import { getReservationDetailData, getReservationFormData } from "@/lib/app-data";
-import { formatDateTimeShort, toDatetimeLocalValue } from "@/lib/date";
+import { formatDateOnly, formatDateTimeShort, formatReservationPeriod } from "@/lib/date";
 import { brl } from "@/lib/money";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { sumPaidCents } from "@/lib/reservation-status";
 import { sumCreditBalance } from "@/lib/credits";
 import {
-  concludeWithLateFeeAction,
   deleteReservationAction,
   registerPaymentAction,
   useTutorCreditAction,
@@ -54,7 +53,7 @@ export default async function ReservationDetailPage({
           <>
             <Link className="btn" href="/agenda"><ArrowLeft /> Agenda</Link>
             <NovaReservaModal
-              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
+              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name, phone: t.phone, email: t.email }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
               serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
               seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
@@ -72,7 +71,7 @@ export default async function ReservationDetailPage({
             <div className="card__header">
               <div>
                 <div className="card__title"><CalendarClock /> Dados da reserva</div>
-                <div className="card__subtitle">{formatDateTimeShort(reservation.startsAt)} - {formatDateTimeShort(reservation.endsAt)}</div>
+                <div className="card__subtitle">{formatReservationPeriod(reservation.startsAt, reservation.endsAt)}</div>
               </div>
               <div className="row">
                 <StatusBadge status={reservation.status} />
@@ -159,9 +158,9 @@ export default async function ReservationDetailPage({
                         {task.description ? <div className="muted">{task.description}</div> : null}
                       </td>
                       <td>{task.pet ? <Link href={`/pets/${task.pet.id}/ficha`}>{task.pet.name}</Link> : "-"}</td>
-                      <td className="mono subtle">{formatDateTimeShort(task.taskDate)}</td>
+                      <td className="mono subtle">{formatDateOnly(task.taskDate)}</td>
                       <td className="muted">
-                        {task.endsAt ? `Até ${formatDateTimeShort(task.endsAt)}` : `${task.occurrences.length} ocorrência`}
+                        {task.endsAt ? `Até ${formatDateOnly(task.endsAt)}` : `${task.occurrences.length} ocorrência`}
                       </td>
                     </tr>
                   )) : (
@@ -184,7 +183,6 @@ export default async function ReservationDetailPage({
               <div><div className="field__label">Taxi pet</div><strong>{brl(reservation.taxiPetCents)}</strong></div>
               <div><div className="field__label">Desconto</div><strong>{brl(reservation.discountCents)}</strong></div>
               <div><div className="field__label">Adicionais</div><strong>{brl(reservation.additionalCents)}</strong></div>
-              <div><div className="field__label">Atraso</div><strong>{brl(reservation.lateFeeCents)}</strong></div>
               <div><div className="field__label">Total</div><strong>{brl(reservation.totalCents)}</strong></div>
               <div><div className="field__label">Sinal sugerido</div><strong>{brl(reservation.depositSuggestedCents)}</strong></div>
               <div><div className="field__label">Saldo em aberto</div><strong>{brl(remainingCents)}</strong></div>
@@ -227,6 +225,9 @@ export default async function ReservationDetailPage({
               </div>
             </div>
             <div className="card__body stack" style={{ gap: 10 }}>
+              <Link className="btn btn--primary" href={`/reservas/${reservation.id}/editar`}>
+                <Edit /> Editar reserva
+              </Link>
               <ReservationStatusMenu reservationId={reservation.id} />
               <ConfirmForm
                 action={deleteReservation}
@@ -242,22 +243,6 @@ export default async function ReservationDetailPage({
                 </button>
               </ConfirmForm>
             </div>
-          </section>
-
-          <section className="card">
-            <div className="card__header">
-              <div>
-                <div className="card__title">Concluir com atraso</div>
-                <div className="card__subtitle">Calcula hora iniciada automaticamente</div>
-              </div>
-            </div>
-            <form className="card__body stack" action={concludeWithLateFeeAction.bind(null, reservation.id)}>
-              <label className="field">
-                <span className="field__label">Saída real</span>
-                <input className="input" name="actualEndedAt" type="datetime-local" defaultValue={toDatetimeLocalValue(reservation.endsAt)} />
-              </label>
-              <button className="btn btn--primary" type="submit">Calcular e concluir</button>
-            </form>
           </section>
 
           <section className="card">

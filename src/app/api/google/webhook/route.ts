@@ -6,6 +6,12 @@ import {
   verifyGoogleChannelToken,
 } from "@/lib/google/calendar";
 
+function parseGoogleAllDay(value: string): Date | null {
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
 export async function POST(request: NextRequest) {
   const channelId = request.headers.get("x-goog-channel-id");
   const resourceId = request.headers.get("x-goog-resource-id");
@@ -52,8 +58,18 @@ export async function POST(request: NextRequest) {
     const reservationId = event.extendedProperties?.private?.zeniReservationId;
     if (!reservationId) continue;
 
-    const startsAt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
-    const endsAt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
+    // All-day events come with start.date / end.date (YYYY-MM-DD). Datetime
+    // events use start.dateTime / end.dateTime. Support both.
+    const startsAt = event.start?.dateTime
+      ? new Date(event.start.dateTime)
+      : event.start?.date
+        ? parseGoogleAllDay(event.start.date)
+        : null;
+    const endsAt = event.end?.dateTime
+      ? new Date(event.end.dateTime)
+      : event.end?.date
+        ? parseGoogleAllDay(event.end.date)
+        : null;
 
     await getPrisma().reservation.updateMany({
       where: { id: reservationId },

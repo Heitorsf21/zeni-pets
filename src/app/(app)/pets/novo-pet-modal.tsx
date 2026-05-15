@@ -51,18 +51,33 @@ export function NovoPetModal({ tutors, defaultTutorId, fixedTutorId, triggerLabe
           </select>
         </label>
         <label className="field"><span className="field__label">Raça</span><input className="input" name="breed" /></label>
-        <label className="field"><span className="field__label">Idade</span><input className="input" name="ageLabel" /></label>
+        <label className="field">
+          <span className="field__label">Idade aproximada (anos)</span>
+          <input className="input" name="ageLabel" type="number" min={0} max={40} step={1} inputMode="numeric" />
+        </label>
         <div className="row" style={{ gridColumn: "1 / -1" }}>
           <label className="check"><input type="checkbox" name="isNeutered" /> Castrado</label>
           <label className="check"><input type="checkbox" name="isSociable" /> Sociável</label>
         </div>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
-          <span className="field__label">Alimentação</span>
-          <textarea className="textarea" name="foodNotes" />
+          <span className="field__label">Rotina alimentar</span>
+          <textarea className="textarea" name="foodNotes" placeholder="Quantidade, horários, tipo de ração..." />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Restrições alimentares</span>
+          <textarea className="textarea" name="foodRestrictions" placeholder="Alergias, intolerâncias, alimentos proibidos..." />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Petiscos</span>
+          <textarea className="textarea" name="foodTreats" placeholder="O que pode receber, frequência..." />
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Saúde</span>
           <textarea className="textarea" name="healthNotes" />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Pontos de atenção</span>
+          <textarea className="textarea" name="attentionNotes" placeholder="Cuidados especiais a destacar na entrada/saída..." />
         </label>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>
           <button className="btn btn--primary" type="submit">Salvar pet</button>

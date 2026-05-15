@@ -195,13 +195,18 @@ model Pet {
   species              String           @default("dog")
   breed                String?
   ageLabel             String?
+  ageReferenceYear     Int?
   birthDate            DateTime?
   weightKg             Float?
   isNeutered           Boolean?
   isSociable           Boolean?
   foodNotes            String?
+  foodRestrictions     String?
+  foodTreats           String?
   healthNotes          String?
   behaviorNotes        String?
+  historyNotes         String?
+  attentionNotes       String?
   vetName              String?
   vetPhone             String?
   deliveredItems       String?
@@ -472,6 +477,7 @@ model BusinessSettings {
   lateFeeOnePetCents   Int      @default(1000)
   lateFeeManyPetsCents Int      @default(1500)
   depositPercent       Int      @default(50)
+  highSeasonSurchargePercent Int @default(0)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }

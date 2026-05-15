@@ -89,12 +89,17 @@ function clientFromStoredTokens(input: {
   return client;
 }
 
+function toGoogleDate(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function reservationToGoogleEvent(input: ReservationCalendarEventInput) {
   return {
     summary: input.title,
     description: input.notes ?? undefined,
-    start: { dateTime: input.startsAt.toISOString() },
-    end: { dateTime: input.endsAt.toISOString() },
+    start: { date: toGoogleDate(input.startsAt) },
+    end: { date: toGoogleDate(input.endsAt) },
     attendees:
       input.inviteTutor && input.tutorEmail ? [{ email: input.tutorEmail }] : undefined,
     extendedProperties: {

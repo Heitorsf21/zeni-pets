@@ -4,6 +4,7 @@ import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationFormData } from "@/lib/app-data";
 import { createReservationAction } from "@/app/(app)/reservas/actions";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
+import { ReservationPeriodFields } from "@/app/(app)/reservas/reservation-period-fields";
 import { ReservationPetFields } from "@/app/(app)/reservas/reservation-pet-fields";
 import { ReservationPricingPreview } from "@/app/(app)/reservas/reservation-pricing-preview";
 import { ReservationTaskFields } from "@/app/(app)/reservas/reservation-task-fields";
@@ -44,7 +45,7 @@ export default async function NovaReservaPage({
             </div>
             <div className="card__body form-grid">
               <ReservationPetFields
-                tutors={tutors.map((tutor) => ({ id: tutor.id, name: tutor.name }))}
+                tutors={tutors.map((tutor) => ({ id: tutor.id, name: tutor.name, phone: tutor.phone, email: tutor.email }))}
                 pets={pets.map((pet) => ({ id: pet.id, name: pet.name, tutor: { id: pet.tutor.id, name: pet.tutor.name } }))}
               />
             </div>
@@ -75,14 +76,7 @@ export default async function NovaReservaPage({
               <div className="card__title"><CalendarClock /> Período</div>
             </div>
             <div className="card__body form-grid">
-              <label className="field">
-                <span className="field__label">Check-in</span>
-                <input className="input" name="startsAt" type="datetime-local" required />
-              </label>
-              <label className="field">
-                <span className="field__label">Check-out</span>
-                <input className="input" name="endsAt" type="datetime-local" required />
-              </label>
+              <ReservationPeriodFields formId="reservation-form" serviceTypes={serviceOptions} />
               <label className="field">
                 <span className="field__label">Valor base manual</span>
                 <input className="input" name="baseAmountCents" placeholder="automatico" />

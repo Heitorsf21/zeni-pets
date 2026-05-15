@@ -23,6 +23,10 @@ export function calculateChargeableStayUnits(startsAt: Date, endsAt: Date) {
   return Math.max(Math.ceil(diffMs / DAY_MS), 1);
 }
 
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 export function calculateDepositPlan(totalCents: number, depositPercent = 50) {
   const depositSuggestedCents = Math.round((totalCents * depositPercent) / 100);
   return {
@@ -72,11 +76,27 @@ export function calculateTaxiPetCents(input: {
 }
 
 export function isHighSeason(date: Date, periods: SeasonWindow[]) {
-  const time = date.getTime();
+  const time = startOfLocalDay(date).getTime();
   return periods.some((period) => {
     if (period.isActive === false) return false;
-    return time >= period.startsAt.getTime() && time <= period.endsAt.getTime();
+    return time >= startOfLocalDay(period.startsAt).getTime() && time <= startOfLocalDay(period.endsAt).getTime();
   });
+}
+
+export function countHighSeasonStayUnits(startsAt: Date, endsAt: Date, periods: SeasonWindow[]) {
+  const units = calculateChargeableStayUnits(startsAt, endsAt);
+  if (!units || !periods.length) return 0;
+
+  const firstDay = startOfLocalDay(startsAt);
+  let highSeasonUnits = 0;
+
+  for (let index = 0; index < units; index++) {
+    const day = new Date(firstDay);
+    day.setDate(firstDay.getDate() + index);
+    if (isHighSeason(day, periods)) highSeasonUnits++;
+  }
+
+  return highSeasonUnits;
 }
 
 export function calculateReservationTotals(input: ReservationTotalInput) {

@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   Bed,
+  Cake,
   Clock,
   MoreHorizontal,
   Sun,
@@ -54,7 +55,7 @@ export default async function DashboardPage({
         subtitle={todayLabel}
         actions={
           <NovaReservaModal
-            tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
+            tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name, phone: t.phone, email: t.email }))}
             pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
             serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
             seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
@@ -237,6 +238,45 @@ export default async function DashboardPage({
           </div>
 
           <aside className="stack">
+            {dashboard.birthdayTutors.length ? (
+              <section className="card">
+                <div className="card__header">
+                  <div>
+                    <div className="card__title"><Cake /> Aniversariantes hoje</div>
+                    <div className="card__subtitle">
+                      {dashboard.birthdayTutors.length === 1 ? "1 tutor" : `${dashboard.birthdayTutors.length} tutores`} fazendo aniversário
+                    </div>
+                  </div>
+                </div>
+                <div className="card__body card__body--flush">
+                  {dashboard.birthdayTutors.map((tutor, index) => (
+                    <Link
+                      key={tutor.id}
+                      href={`/tutores/${tutor.id}/ficha`}
+                      className="row"
+                      style={{
+                        padding: "12px 16px",
+                        gap: 12,
+                        alignItems: "center",
+                        borderBottom: index < dashboard.birthdayTutors.length - 1 ? "1px solid var(--border)" : "0",
+                      }}
+                    >
+                      <div className="icon-circle icon-circle--warm">
+                        <Cake />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{tutor.name}</div>
+                        <div className="subtle" style={{ fontSize: 11 }}>
+                          {tutor.yearsCompleted != null ? `${tutor.yearsCompleted} anos` : "aniversário hoje"}
+                          {tutor.phone ? ` · ${tutor.phone}` : ""}
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <section className="card">
               <div className="card__header">
                 <div>

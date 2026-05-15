@@ -14,19 +14,41 @@ export type PriceRuleLike = {
   hygieneFeeCents?: number | null;
 };
 
+export type PriceCalculationOptions = {
+  highSeasonSurchargePercent?: number | null;
+};
+
+function normalizedSurchargePercent(percent: number | null | undefined) {
+  return Number.isFinite(percent) && (percent ?? 0) > 0 ? Math.max(Math.trunc(percent ?? 0), 0) : 0;
+}
+
+function applySurcharge(cents: number, percent: number) {
+  if (percent <= 0) return cents;
+  return Math.round((cents * (100 + percent)) / 100);
+}
+
+function calculateRegularUnitCents(rule: PriceRuleLike, petCount: number) {
+  return rule.firstPetCents + Math.max(petCount - 1, 0) * (rule.additionalPetCents ?? 0);
+}
+
 export function calculatePriceRuleUnitCents(
   rule: PriceRuleLike,
   petCount: number,
   highSeason: boolean,
+  options: PriceCalculationOptions = {},
 ) {
   if (petCount <= 0) return 0;
 
-  const firstPet = highSeason
-    ? rule.highSeasonFirstPetCents ?? rule.firstPetCents
-    : rule.firstPetCents;
-  const additionalPet = highSeason
-    ? rule.highSeasonAdditionalCents ?? rule.additionalPetCents ?? 0
-    : rule.additionalPetCents ?? 0;
+  const regularUnitCents = calculateRegularUnitCents(rule, petCount);
+  if (!highSeason) return regularUnitCents;
+
+  const surchargePercent = normalizedSurchargePercent(options.highSeasonSurchargePercent);
+  if (surchargePercent > 0) {
+    return applySurcharge(regularUnitCents, surchargePercent);
+  }
+
+  const firstPet = rule.highSeasonFirstPetCents ?? rule.firstPetCents;
+  const additionalPet = rule.highSeasonAdditionalCents ?? rule.additionalPetCents ?? 0;
 
   return firstPet + Math.max(petCount - 1, 0) * additionalPet;
 }
@@ -36,8 +58,31 @@ export function calculatePriceRuleBaseCents(
   petCount: number,
   highSeason: boolean,
   chargeableUnits = 1,
+  options: PriceCalculationOptions = {},
 ) {
-  return calculatePriceRuleUnitCents(rule, petCount, highSeason) * Math.max(chargeableUnits, 1);
+  return calculatePriceRuleUnitCents(rule, petCount, highSeason, options) * Math.max(chargeableUnits, 1);
+}
+
+export function calculatePriceRuleStayCents(
+  rule: PriceRuleLike,
+  petCount: number,
+  chargeableUnits: number,
+  highSeasonUnits: number,
+  options: PriceCalculationOptions = {},
+) {
+  if (petCount <= 0 || chargeableUnits <= 0) return 0;
+
+  const totalUnits = Math.max(chargeableUnits, 1);
+  const highUnits = Math.min(Math.max(highSeasonUnits, 0), totalUnits);
+  const regularUnits = totalUnits - highUnits;
+  const regularUnitCents = calculatePriceRuleUnitCents(rule, petCount, false, options);
+  const highSeasonUnitCents = calculatePriceRuleUnitCents(rule, petCount, true, options);
+
+  return regularUnits * regularUnitCents + highUnits * highSeasonUnitCents;
+}
+
+export function calculateManualDailyBaseCents(dailyAmountCents: number, chargeableUnits: number) {
+  return Math.max(dailyAmountCents, 0) * Math.max(chargeableUnits, 1);
 }
 
 export function hasTaxiPricing(rule: PriceRuleLike | null | undefined) {

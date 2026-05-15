@@ -6,8 +6,8 @@ describe("Google Calendar event mapping", () => {
     const event = reservationToGoogleEvent({
       reservationId: "reservation-1",
       title: "Hospedagem - Theo",
-      startsAt: new Date("2026-04-27T10:00:00-03:00"),
-      endsAt: new Date("2026-05-01T18:00:00-03:00"),
+      startsAt: new Date(2026, 3, 27),
+      endsAt: new Date(2026, 4, 2),
       inviteTutor: false,
       tutorEmail: "tutor@example.com",
     });
@@ -16,12 +16,26 @@ describe("Google Calendar event mapping", () => {
     expect(event.attendees).toBeUndefined();
   });
 
+  it("emits all-day events using start.date and end.date (exclusive)", () => {
+    const event = reservationToGoogleEvent({
+      reservationId: "reservation-3",
+      title: "Hospedagem - Rex",
+      startsAt: new Date(2026, 4, 7),
+      endsAt: new Date(2026, 4, 15),
+      inviteTutor: false,
+    });
+
+    expect(event.start).toEqual({ date: "2026-05-07" });
+    expect(event.end).toEqual({ date: "2026-05-15" });
+    expect((event.start as { dateTime?: string }).dateTime).toBeUndefined();
+  });
+
   it("adds attendees only when tutor invite is enabled", () => {
     const event = reservationToGoogleEvent({
       reservationId: "reservation-2",
       title: "Creche - Pipoca",
-      startsAt: new Date("2026-04-28T08:30:00-03:00"),
-      endsAt: new Date("2026-04-28T18:00:00-03:00"),
+      startsAt: new Date(2026, 3, 28),
+      endsAt: new Date(2026, 3, 29),
       inviteTutor: true,
       tutorEmail: "tutor@example.com",
     });

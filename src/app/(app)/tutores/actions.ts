@@ -10,7 +10,13 @@ import { getTutorCreditBalance } from "@/lib/credits";
 function parseBirthDate(value: FormDataEntryValue | null): Date | null {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) return null;
-  const date = new Date(`${text}T00:00:00`);
+  const parts = text.split("-").map(Number);
+  if (parts.length !== 3) return null;
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return null;
+  const currentYear = new Date().getFullYear();
+  if (year < 1900 || year > currentYear) return null;
+  const date = new Date(year, month - 1, day);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

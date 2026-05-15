@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Search, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-type Tutor = { id: string; name: string };
+type Tutor = { id: string; name: string; phone?: string | null; email?: string | null };
 type Pet = { id: string; name: string; tutor: { id: string; name: string } };
 
 type Props = {
@@ -10,49 +11,171 @@ type Props = {
   pets: Pet[];
   defaultTutorId?: string;
   defaultPetId?: string;
+  defaultPetIds?: string[];
 };
 
-export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetId }: Props) {
+export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetId, defaultPetIds }: Props) {
+  const initialPetIds = defaultPetIds && defaultPetIds.length ? defaultPetIds : defaultPetId ? [defaultPetId] : [];
   const [selectedTutorId, setSelectedTutorId] = useState(defaultTutorId ?? "");
-  const [selectedPetIds, setSelectedPetIds] = useState<string[]>(defaultPetId ? [defaultPetId] : []);
+  const [selectedPetIds, setSelectedPetIds] = useState<string[]>(initialPetIds);
+  const [tutorQuery, setTutorQuery] = useState(() => {
+    if (!defaultTutorId) return "";
+    return tutors.find((tutor) => tutor.id === defaultTutorId)?.name ?? "";
+  });
+  const [tutorOpen, setTutorOpen] = useState(false);
+  const [petQuery, setPetQuery] = useState("");
+  const tutorBoxRef = useRef<HTMLDivElement>(null);
+  const tutorHiddenRef = useRef<HTMLInputElement>(null);
 
-  const filteredPets = useMemo(
-    () => (selectedTutorId ? pets.filter((pet) => pet.tutor.id === selectedTutorId) : []),
+  const tutorsById = useMemo(() => new Map(tutors.map((tutor) => [tutor.id, tutor])), [tutors]);
+  const selectedTutor = selectedTutorId ? tutorsById.get(selectedTutorId) ?? null : null;
+
+  const filteredTutors = useMemo(() => {
+    const q = tutorQuery.trim().toLowerCase();
+    if (!q) return tutors.slice(0, 12);
+    return tutors
+      .filter((tutor) => {
+        const haystack = `${tutor.name} ${tutor.phone ?? ""} ${tutor.email ?? ""}`.toLowerCase();
+        return haystack.includes(q);
+      })
+      .slice(0, 12);
+  }, [tutors, tutorQuery]);
+
+  const filteredPets = useMemo(() => {
+    if (!selectedTutorId) return [];
+    const list = pets.filter((pet) => pet.tutor.id === selectedTutorId);
+    const q = petQuery.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((pet) => pet.name.toLowerCase().includes(q));
+  }, [pets, selectedTutorId, petQuery]);
+
+  const tutorPetsCount = useMemo(
+    () => (selectedTutorId ? pets.filter((pet) => pet.tutor.id === selectedTutorId).length : 0),
     [pets, selectedTutorId],
   );
-  const selectedPets = filteredPets.filter((pet) => selectedPetIds.includes(pet.id));
 
-  function changeTutor(tutorId: string) {
-    setSelectedTutorId(tutorId);
+  useEffect(() => {
+    function onDocClick(event: MouseEvent) {
+      if (tutorBoxRef.current && !tutorBoxRef.current.contains(event.target as Node)) {
+        setTutorOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  useEffect(() => {
+    if (!tutorHiddenRef.current) return;
+    tutorHiddenRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [selectedTutorId]);
+
+  function pickTutor(tutor: Tutor) {
+    setSelectedTutorId(tutor.id);
+    setTutorQuery(tutor.name);
+    setTutorOpen(false);
     setSelectedPetIds((current) =>
-      current.filter((petId) => pets.some((pet) => pet.id === petId && pet.tutor.id === tutorId)),
+      current.filter((petId) => pets.some((pet) => pet.id === petId && pet.tutor.id === tutor.id)),
     );
   }
 
-  function togglePet(petId: string, checked: boolean) {
-    setSelectedPetIds((current) => {
-      if (checked) return current.includes(petId) ? current : [...current, petId];
-      return current.filter((id) => id !== petId);
-    });
+  function clearTutor() {
+    setSelectedTutorId("");
+    setTutorQuery("");
+    setSelectedPetIds([]);
   }
 
   return (
     <>
-      <label className="field">
+      <input
+        type="hidden"
+        name="tutorId"
+        value={selectedTutorId}
+        ref={tutorHiddenRef}
+        required
+      />
+
+      <div className="field" ref={tutorBoxRef} style={{ position: "relative" }}>
         <span className="field__label">Tutor</span>
-        <select
-          className="select"
-          name="tutorId"
-          required
-          value={selectedTutorId}
-          onChange={(event) => changeTutor(event.target.value)}
-        >
-          <option value="">Selecione</option>
-          {tutors.map((tutor) => (
-            <option key={tutor.id} value={tutor.id}>{tutor.name}</option>
-          ))}
-        </select>
-      </label>
+        <span className="row" style={{ position: "relative", alignItems: "center" }}>
+          <Search style={{ position: "absolute", left: 10, width: 16, height: 16, color: "var(--muted)" }} />
+          <input
+            className="input"
+            type="search"
+            placeholder="Buscar tutor por nome, telefone ou e-mail"
+            value={tutorQuery}
+            onChange={(event) => {
+              setTutorQuery(event.target.value);
+              setTutorOpen(true);
+            }}
+            onFocus={() => setTutorOpen(true)}
+            style={{ paddingLeft: 32, width: "100%" }}
+            aria-required
+          />
+          {selectedTutorId ? (
+            <button
+              type="button"
+              className="btn btn--ghost btn--icon"
+              aria-label="Limpar tutor"
+              onClick={clearTutor}
+              style={{ position: "absolute", right: 4 }}
+            >
+              <X style={{ width: 14, height: 14 }} />
+            </button>
+          ) : null}
+        </span>
+        {tutorOpen ? (
+          <ul
+            role="listbox"
+            style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              right: 0,
+              zIndex: 10,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              marginTop: 4,
+              maxHeight: 260,
+              overflowY: "auto",
+              listStyle: "none",
+              padding: 4,
+            }}
+          >
+            {filteredTutors.length === 0 ? (
+              <li className="muted" style={{ padding: "8px 10px", fontSize: 12 }}>
+                Nenhum tutor encontrado.
+              </li>
+            ) : (
+              filteredTutors.map((tutor) => (
+                <li key={tutor.id}>
+                  <button
+                    type="button"
+                    onClick={() => pickTutor(tutor)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      background: tutor.id === selectedTutorId ? "var(--surface-2, #f5f7fb)" : "transparent",
+                      border: 0,
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    <strong>{tutor.name}</strong>
+                    {tutor.phone || tutor.email ? (
+                      <div className="subtle" style={{ fontSize: 11 }}>
+                        {[tutor.phone, tutor.email].filter(Boolean).join(" · ")}
+                      </div>
+                    ) : null}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        ) : null}
+      </div>
 
       <fieldset
         className="field"
@@ -63,7 +186,23 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
           padding: 0,
         }}
       >
-        <legend className="field__label">Pets da reserva</legend>
+        <legend className="field__label">
+          Pets da reserva
+          {selectedTutor ? <span className="subtle"> · {selectedTutor.name}</span> : null}
+        </legend>
+        {selectedTutorId && tutorPetsCount > 5 ? (
+          <span className="row" style={{ position: "relative", alignItems: "center", marginBottom: 6 }}>
+            <Search style={{ position: "absolute", left: 10, width: 14, height: 14, color: "var(--muted)" }} />
+            <input
+              className="input"
+              type="search"
+              placeholder="Filtrar pets pelo nome"
+              value={petQuery}
+              onChange={(event) => setPetQuery(event.target.value)}
+              style={{ paddingLeft: 32, width: "100%" }}
+            />
+          </span>
+        ) : null}
         <div
           style={{
             display: "grid",
@@ -71,36 +210,48 @@ export function ReservationPetFields({ tutors, pets, defaultTutorId, defaultPetI
             gap: 8,
           }}
         >
-          {filteredPets.length ? filteredPets.map((pet) => (
-            <label
-              className="check"
-              key={pet.id}
-              style={{
-                minHeight: 38,
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                padding: "9px 10px",
-                color: "var(--text)",
-              }}
-            >
-              <input
-                type="checkbox"
-                name="petIds"
-                value={pet.id}
-                checked={selectedPetIds.includes(pet.id)}
-                onChange={(event) => togglePet(pet.id, event.target.checked)}
-              />
-              {pet.name}
-            </label>
-          )) : (
+          {!selectedTutorId ? (
             <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>
               Selecione um tutor para ver os pets.
             </p>
+          ) : filteredPets.length === 0 ? (
+            <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>
+              {petQuery ? "Nenhum pet com este nome." : "Tutor sem pets cadastrados."}
+            </p>
+          ) : (
+            filteredPets.map((pet) => (
+              <label
+                className="check"
+                key={pet.id}
+                style={{
+                  minHeight: 38,
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "9px 10px",
+                  color: "var(--text)",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  name="petIds"
+                  value={pet.id}
+                  checked={selectedPetIds.includes(pet.id)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSelectedPetIds((current) => {
+                      if (checked) return current.includes(pet.id) ? current : [...current, pet.id];
+                      return current.filter((id) => id !== pet.id);
+                    });
+                  }}
+                />
+                {pet.name}
+              </label>
+            ))
           )}
         </div>
-        {selectedPets.length ? (
-          <p className="subtle" style={{ margin: 0, fontSize: 11 }}>
-            {selectedPets.length} {selectedPets.length === 1 ? "pet selecionado" : "pets selecionados"} para esta reserva.
+        {selectedPetIds.length ? (
+          <p className="subtle" style={{ margin: "6px 0 0", fontSize: 11 }}>
+            {selectedPetIds.length} {selectedPetIds.length === 1 ? "pet selecionado" : "pets selecionados"} para esta reserva.
           </p>
         ) : null}
       </fieldset>

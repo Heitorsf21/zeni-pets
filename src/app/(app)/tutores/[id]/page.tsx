@@ -17,7 +17,7 @@ import { PetAvatar } from "@/components/ui/pet-avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationFormData, getTutorDetailData } from "@/lib/app-data";
-import { formatDateShort, formatDateTimeShort } from "@/lib/date";
+import { formatDateShort, formatDateTimeShort, formatReservationPeriod } from "@/lib/date";
 import { brl } from "@/lib/money";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { adjustTutorCreditAction, deleteTutorAction, toggleTutorStatusAction, updateTutorAction } from "../actions";
@@ -115,7 +115,7 @@ export default async function TutorDetailPage({
               deleteAction={deleteTutor}
             />
             <NovaReservaModal
-              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
+              tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name, phone: t.phone, email: t.email }))}
               pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
               serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
               seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
@@ -196,7 +196,7 @@ export default async function TutorDetailPage({
                     {recentReservations.length ? recentReservations.map((reservation) => (
                       <tr key={reservation.id}>
                         <td className="mono" style={{ fontSize: 12 }}>
-                          {formatDateTimeShort(reservation.startsAt)} - {formatDateTimeShort(reservation.endsAt)}
+                          {formatReservationPeriod(reservation.startsAt, reservation.endsAt)}
                         </td>
                         <td>
                           <Link href={`/reservas/${reservation.id}`}>
@@ -319,7 +319,7 @@ export default async function TutorDetailPage({
               </div>
               <div className="card__body stack" style={{ gap: 8 }}>
                 <NovaReservaModal
-                  tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name }))}
+                  tutors={formData.tutors.map((t) => ({ id: t.id, name: t.name, phone: t.phone, email: t.email }))}
                   pets={formData.pets.map((p) => ({ id: p.id, name: p.name, tutor: { id: p.tutor.id, name: p.tutor.name } }))}
                   serviceTypes={toReservationServiceOptions(formData.serviceTypes)}
                   seasonPeriods={toReservationSeasonOptions(formData.seasonPeriods)}
