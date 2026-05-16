@@ -6,6 +6,7 @@ import {
   Cake,
   Clock,
   MoreHorizontal,
+  PawPrint,
   Sun,
   Trash2,
   TrendingUp,
@@ -19,7 +20,7 @@ import { PetRow } from "@/components/ui/pet-avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { ConfirmForm } from "@/components/ui/confirm-form";
-import { getDashboardData, getReservationFormData } from "@/lib/app-data";
+import { getDashboardData, getReservationFormData, type MonthBirthday } from "@/lib/app-data";
 import { prepareRevenueChartData } from "@/lib/dashboard-chart";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { deleteTaskAction, toggleTaskOccurrenceAction } from "./actions";
@@ -27,6 +28,38 @@ import { NovaTarefaModal } from "./nova-tarefa-modal";
 import { NovaReservaModal } from "@/app/(app)/reservas/nova-reserva-modal";
 
 const metricIcons = { Bed, Sun, Wallet, AlertCircle };
+
+const MONTH_LABELS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+function renderBirthdaySection(label: string, items: MonthBirthday[], muted: boolean) {
+  return (
+    <div style={{ opacity: muted ? 0.6 : 1 }}>
+      <div className="subtle" style={{ padding: "10px 16px 4px", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
+      {items.map((item, index) => (
+        <Link
+          key={`${item.kind}-${item.id}`}
+          href={item.kind === "tutor" ? `/tutores/${item.id}/ficha` : `/pets/${item.id}/ficha`}
+          className="row"
+          style={{ padding: "10px 16px", gap: 12, alignItems: "center", borderBottom: index < items.length - 1 ? "1px solid var(--border)" : "0" }}
+        >
+          <div className="icon-circle icon-circle--warm">
+            {item.kind === "tutor" ? <Cake style={{ width: 14, height: 14 }} /> : <PawPrint style={{ width: 14, height: 14 }} />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+            <div className="subtle" style={{ fontSize: 11 }}>
+              {item.ageAtBirthday} {item.ageAtBirthday === 1 ? "ano" : "anos"}
+              {item.tutorName ? ` · tutor de ${item.tutorName}` : ""}
+            </div>
+          </div>
+          <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
+            {item.daysUntil === 0 ? "Hoje" : item.daysUntil === 1 ? "Amanhã" : item.daysUntil > 0 ? `Dia ${item.dayOfMonth}` : `Passou dia ${item.dayOfMonth}`}
+          </span>
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -47,6 +80,11 @@ export default async function DashboardPage({
     year: "numeric",
   }).format(today);
   const doneTasks = dashboard.tasks.filter((task) => task.done).length;
+  const monthBirthdays = dashboard.monthBirthdays ?? [];
+  const todayBirthdays = monthBirthdays.filter((b) => b.daysUntil === 0);
+  const upcomingBirthdays = monthBirthdays.filter((b) => b.daysUntil > 0);
+  const pastBirthdays = monthBirthdays.filter((b) => b.daysUntil < 0);
+  const monthLabel = MONTH_LABELS_FULL[today.getMonth()];
 
   return (
     <>
@@ -238,44 +276,28 @@ export default async function DashboardPage({
           </div>
 
           <aside className="stack">
-            {dashboard.birthdayTutors.length ? (
-              <section className="card">
-                <div className="card__header">
-                  <div>
-                    <div className="card__title"><Cake /> Aniversariantes hoje</div>
-                    <div className="card__subtitle">
-                      {dashboard.birthdayTutors.length === 1 ? "1 tutor" : `${dashboard.birthdayTutors.length} tutores`} fazendo aniversário
-                    </div>
+            <section className="card">
+              <div className="card__header">
+                <div>
+                  <div className="card__title"><Cake /> Aniversariantes de {monthLabel}</div>
+                  <div className="card__subtitle">
+                    {monthBirthdays.length === 0
+                      ? "Ninguém faz aniversário neste mês"
+                      : `${todayBirthdays.length} hoje · ${upcomingBirthdays.length} a chegar · ${pastBirthdays.length} já passaram`}
                   </div>
                 </div>
-                <div className="card__body card__body--flush">
-                  {dashboard.birthdayTutors.map((tutor, index) => (
-                    <Link
-                      key={tutor.id}
-                      href={`/tutores/${tutor.id}/ficha`}
-                      className="row"
-                      style={{
-                        padding: "12px 16px",
-                        gap: 12,
-                        alignItems: "center",
-                        borderBottom: index < dashboard.birthdayTutors.length - 1 ? "1px solid var(--border)" : "0",
-                      }}
-                    >
-                      <div className="icon-circle icon-circle--warm">
-                        <Cake />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{tutor.name}</div>
-                        <div className="subtle" style={{ fontSize: 11 }}>
-                          {tutor.yearsCompleted != null ? `${tutor.yearsCompleted} anos` : "aniversário hoje"}
-                          {tutor.phone ? ` · ${tutor.phone}` : ""}
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            ) : null}
+              </div>
+              <div className="card__body card__body--flush">
+                {todayBirthdays.length > 0 && renderBirthdaySection("Hoje", todayBirthdays, false)}
+                {upcomingBirthdays.length > 0 && renderBirthdaySection("Ainda este mês", upcomingBirthdays, false)}
+                {pastBirthdays.length > 0 && renderBirthdaySection("Já passaram", pastBirthdays, true)}
+                {monthBirthdays.length === 0 && (
+                  <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: 12 }}>
+                    Cadastre data de nascimento nos tutores e pets pra ver aqui.
+                  </div>
+                )}
+              </div>
+            </section>
 
             <section className="card">
               <div className="card__header">

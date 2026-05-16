@@ -507,7 +507,11 @@ export async function getReservationDetailData(id: string) {
         },
         serviceType: true,
         priceRule: true,
-        reservationPets: { include: { pet: true } },
+        reservationPets: {
+          include: { pet: true, serviceType: true, priceRule: true },
+          orderBy: { createdAt: "asc" },
+        },
+        visitDates: { orderBy: { date: "asc" } },
         payments: { orderBy: { createdAt: "desc" } },
         financialEntries: { orderBy: { entryDate: "desc" } },
         tasks: {
@@ -630,6 +634,7 @@ export async function getDashboardData() {
       tasks,
       petSitterVisits,
       birthdayTutors,
+      monthBirthdays,
     ] =
       await Promise.all([
         getPrisma().businessSettings.findUnique({ where: { singletonKey: "default" } }),
@@ -664,6 +669,7 @@ export async function getDashboardData() {
         getTodayTasksData(today),
         getUpcomingPetSitterVisitsData(),
         getTodayBirthdayTutorsData(today),
+        getMonthBirthdaysData(today),
       ]);
 
     const hostedPets = activeReservations
@@ -726,6 +732,7 @@ export async function getDashboardData() {
       tasks,
       petSitterVisits,
       birthdayTutors,
+      monthBirthdays,
     };
   } catch (error) {
     dbUnavailable("dashboard", error);
@@ -755,6 +762,7 @@ export async function getDashboardData() {
       tasks: [],
       petSitterVisits: [],
       birthdayTutors: [] as Array<{ id: string; name: string; phone: string | null; email: string | null; yearsCompleted: number | null }>,
+      monthBirthdays: [] as MonthBirthday[],
     };
   }
 }
@@ -787,6 +795,71 @@ export async function getTodayBirthdayTutorsData(now: Date = new Date()) {
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch (error) {
     dbUnavailable("birthday tutors", error);
+    return [];
+  }
+}
+
+export type MonthBirthday = {
+  id: string;
+  kind: "tutor" | "pet";
+  name: string;
+  tutorName?: string;
+  birthDate: Date;
+  dayOfMonth: number;
+  daysUntil: number;
+  ageAtBirthday: number;
+  alreadyHappenedThisMonth: boolean;
+};
+
+export async function getMonthBirthdaysData(now: Date = new Date()): Promise<MonthBirthday[]> {
+  const currentMonth = now.getMonth();
+  const currentDay = now.getDate();
+  try {
+    const [tutors, pets] = await Promise.all([
+      getPrisma().tutor.findMany({
+        where: { birthDate: { not: null }, status: "ACTIVE" },
+        select: { id: true, name: true, birthDate: true },
+      }),
+      getPrisma().pet.findMany({
+        where: { birthDate: { not: null }, tutor: { status: "ACTIVE" } },
+        select: { id: true, name: true, birthDate: true, tutor: { select: { name: true } } },
+      }),
+    ]);
+
+    function mapItem(kind: "tutor" | "pet", id: string, name: string, birthDate: Date, tutorName?: string): MonthBirthday | null {
+      if (birthDate.getMonth() !== currentMonth) return null;
+      const dayOfMonth = birthDate.getDate();
+      const daysUntil = dayOfMonth - currentDay;
+      return {
+        id,
+        kind,
+        name,
+        tutorName,
+        birthDate,
+        dayOfMonth,
+        daysUntil,
+        ageAtBirthday: now.getFullYear() - birthDate.getFullYear(),
+        alreadyHappenedThisMonth: daysUntil < 0,
+      };
+    }
+
+    const items: MonthBirthday[] = [];
+    for (const t of tutors) {
+      const item = mapItem("tutor", t.id, t.name, t.birthDate!);
+      if (item) items.push(item);
+    }
+    for (const p of pets) {
+      const item = mapItem("pet", p.id, p.name, p.birthDate!, p.tutor.name);
+      if (item) items.push(item);
+    }
+
+    return items.sort((a, b) => {
+      if (a.dayOfMonth !== b.dayOfMonth) return a.dayOfMonth - b.dayOfMonth;
+      if (a.kind !== b.kind) return a.kind === "tutor" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  } catch (error) {
+    dbUnavailable("month birthdays", error);
     return [];
   }
 }

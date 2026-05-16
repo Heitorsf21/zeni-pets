@@ -54,3 +54,13 @@ export function displayPetAge(
   const years = base + Math.max(now.getFullYear() - pet.ageReferenceYear, 0);
   return `${years} ${years === 1 ? "ano" : "anos"}`;
 }
+
+export function daysUntilBirthday(birthDate: Date | null, now: Date = new Date()): number | null {
+  if (!birthDate) return null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const thisYearBday = new Date(now.getFullYear(), birthDate.getMonth(), birthDate.getDate());
+  const target = thisYearBday < today
+    ? new Date(now.getFullYear() + 1, birthDate.getMonth(), birthDate.getDate())
+    : thisYearBday;
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
