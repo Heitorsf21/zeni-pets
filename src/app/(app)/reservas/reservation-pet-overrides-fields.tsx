@@ -14,6 +14,7 @@ type Props = {
   pets: PetOption[];
   serviceTypes: ReservationServiceOption[];
   formId?: string;
+  defaultOverrides?: Record<string, Partial<OverrideState>>;
 };
 
 type OverrideState = {
@@ -42,10 +43,18 @@ function ruleLabel(rule: ReservationServiceOption["priceRules"][number]) {
   return [rule.label, rule.paymentMethod, brl(rule.firstPetCents)].filter(Boolean).join(" - ");
 }
 
-export function ReservationPetOverridesFields({ pets, serviceTypes, formId }: Props) {
+export function ReservationPetOverridesFields({ pets, serviceTypes, formId, defaultOverrides }: Props) {
   const pivotRef = useRef<HTMLSpanElement>(null);
   const [selectedPetIds, setSelectedPetIds] = useState<string[]>([]);
-  const [overrides, setOverrides] = useState<Record<string, OverrideState>>({});
+  const [overrides, setOverrides] = useState<Record<string, OverrideState>>(() => {
+    if (!defaultOverrides) return {};
+    return Object.fromEntries(
+      Object.entries(defaultOverrides).map(([petId, partial]) => [
+        petId,
+        { ...blankOverride(serviceTypes), ...partial, enabled: true },
+      ]),
+    );
+  });
 
   useEffect(() => {
     const form = formId

@@ -376,6 +376,16 @@ export async function createReservationAction(formData: FormData) {
   const taskDrafts = reservationTaskDrafts(formData, { startsAt, petIds });
   const initialStatus = deriveInitialReservationStatus({ startsAt, endsAt });
 
+  const rawMainMode = stringField(formData, "pricingMode");
+  const persistedPricingMode =
+    rawMainMode === "manual_daily" || rawMainMode === "manual_total"
+      ? rawMainMode
+      : rawMainMode === "manual"
+        ? "manual_daily"
+        : "fixed";
+  const persistedManualDaily = centsFieldStrict(formData, "manualDailyAmountCents");
+  const persistedManualTotal = centsFieldStrict(formData, "manualTotalAmountCents");
+
   const reservation = await getPrisma().$transaction(async (tx) => {
     const created = await tx.reservation.create({
       data: {
@@ -383,6 +393,9 @@ export async function createReservationAction(formData: FormData) {
         serviceTypeId: base.serviceTypeId,
         priceRuleId: base.priceRule?.id ?? null,
         pricingPaymentMethod: base.pricingPaymentMethod,
+        pricingMode: persistedPricingMode,
+        manualDailyCents: persistedManualDaily,
+        manualTotalCents: persistedManualTotal,
         status: initialStatus,
         paymentStatus: "PENDING",
         startsAt,
@@ -588,6 +601,16 @@ export async function updateReservationAction(id: string, formData: FormData) {
   const previousPetIds = existing.reservationPets.map((rp) => rp.petId);
   const previousTutorId = existing.tutorId;
 
+  const rawMainModeUpdate = stringField(formData, "pricingMode");
+  const persistedPricingModeUpdate =
+    rawMainModeUpdate === "manual_daily" || rawMainModeUpdate === "manual_total"
+      ? rawMainModeUpdate
+      : rawMainModeUpdate === "manual"
+        ? "manual_daily"
+        : "fixed";
+  const persistedManualDailyUpdate = centsFieldStrict(formData, "manualDailyAmountCents");
+  const persistedManualTotalUpdate = centsFieldStrict(formData, "manualTotalAmountCents");
+
   await getPrisma().$transaction(async (tx) => {
     await tx.reservation.update({
       where: { id },
@@ -596,6 +619,9 @@ export async function updateReservationAction(id: string, formData: FormData) {
         serviceTypeId: base.serviceTypeId,
         priceRuleId: base.priceRule?.id ?? null,
         pricingPaymentMethod: base.pricingPaymentMethod,
+        pricingMode: persistedPricingModeUpdate,
+        manualDailyCents: persistedManualDailyUpdate,
+        manualTotalCents: persistedManualTotalUpdate,
         startsAt,
         endsAt,
         notes: optionalStringField(formData, "notes"),

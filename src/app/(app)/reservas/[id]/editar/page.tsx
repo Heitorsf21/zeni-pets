@@ -10,6 +10,7 @@ import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/r
 import { updateReservationAction } from "../../actions";
 import { ReservationPeriodFields } from "../../reservation-period-fields";
 import { ReservationPetFields } from "../../reservation-pet-fields";
+import { ReservationPetOverridesFields } from "../../reservation-pet-overrides-fields";
 import { ReservationPricingPreview } from "../../reservation-pricing-preview";
 import { ServicePriceRuleFields } from "../../service-price-rule-fields";
 
@@ -43,6 +44,21 @@ export default async function EditarReservaPage({
   const endsDisplay = new Date(reservation.endsAt);
   endsDisplay.setDate(endsDisplay.getDate() - 1);
   const endsValue = toDateInputValue(endsDisplay);
+
+  const defaultOverrides = Object.fromEntries(
+    reservation.reservationPets
+      .filter((rp) =>
+        rp.serviceTypeId || rp.priceRuleId || rp.pricingMode ||
+        rp.manualDailyCents != null || rp.manualTotalCents != null
+      )
+      .map((rp) => [rp.pet.id, {
+        serviceTypeId: rp.serviceTypeId ?? "",
+        priceRuleId: rp.priceRuleId ?? "",
+        pricingMode: (rp.pricingMode === "manual_daily" || rp.pricingMode === "manual_total" ? rp.pricingMode : "fixed") as "fixed" | "manual_daily" | "manual_total",
+        manualDailyAmount: rp.manualDailyCents != null ? centsInput(rp.manualDailyCents) : "",
+        manualTotalAmount: rp.manualTotalCents != null ? centsInput(rp.manualTotalCents) : "",
+      }]),
+  );
 
   return (
     <>
@@ -82,7 +98,17 @@ export default async function EditarReservaPage({
               <div className="card__title"><PawPrint /> Tipo de serviço</div>
             </div>
             <div className="card__body form-grid">
-              <ServicePriceRuleFields serviceTypes={serviceOptions} />
+              <ServicePriceRuleFields
+                serviceTypes={serviceOptions}
+                defaultPricingMode={(reservation.pricingMode === "manual_daily" || reservation.pricingMode === "manual_total" ? reservation.pricingMode : "fixed") as "fixed" | "manual_daily" | "manual_total"}
+                defaultPriceRuleId={reservation.priceRule?.id}
+              />
+              <ReservationPetOverridesFields
+                pets={formData.pets.map((pet) => ({ id: pet.id, name: pet.name, tutor: { id: pet.tutor.id, name: pet.tutor.name } }))}
+                serviceTypes={serviceOptions}
+                formId="reservation-edit-form"
+                defaultOverrides={defaultOverrides}
+              />
             </div>
           </div>
 
@@ -96,17 +122,18 @@ export default async function EditarReservaPage({
                 serviceTypes={serviceOptions}
                 defaultStartsAt={startsValue}
                 defaultEndsAt={isPetSitting ? startsValue : endsValue}
+                defaultVisitDates={reservation.visitDates.map((v) => toDateInputValue(v.date))}
               />
               <label className="field">
                 <span className="field__label">Valor por diária (manual)</span>
-                <input className="input" name="manualDailyAmountCents" placeholder="0,00" />
+                <input className="input" name="manualDailyAmountCents" defaultValue={centsInput(reservation.manualDailyCents)} placeholder="0,00" />
                 <span className="subtle" style={{ fontSize: 11 }}>
                   Use quando &ldquo;Valor manual por diária&rdquo; estiver selecionado. Multiplica pelo número de diárias.
                 </span>
               </label>
               <label className="field">
                 <span className="field__label">Valor total (manual)</span>
-                <input className="input" name="manualTotalAmountCents" placeholder="0,00" />
+                <input className="input" name="manualTotalAmountCents" defaultValue={centsInput(reservation.manualTotalCents)} placeholder="0,00" />
                 <span className="subtle" style={{ fontSize: 11 }}>
                   Use quando &ldquo;Valor total manual&rdquo; estiver selecionado.
                 </span>
