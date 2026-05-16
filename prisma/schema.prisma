@@ -300,6 +300,9 @@ model Reservation {
   notes                 String?
   privateNotes          String?
   inviteTutor           Boolean           @default(false)
+  pricingMode           String?
+  manualDailyCents      Int?
+  manualTotalCents      Int?
   baseAmountCents       Int               @default(0)
   discountCents         Int               @default(0)
   additionalCents       Int               @default(0)
