@@ -278,22 +278,31 @@ export default async function DashboardPage({
           <aside className="stack">
             <section className="card">
               <div className="card__header">
-                <div>
-                  <div className="card__title"><Cake /> Aniversariantes de {monthLabel}</div>
-                  <div className="card__subtitle">
-                    {monthBirthdays.length === 0
-                      ? "Ninguém faz aniversário neste mês"
-                      : `${todayBirthdays.length} hoje · ${upcomingBirthdays.length} a chegar · ${pastBirthdays.length} já passaram`}
-                  </div>
+                <div className="card__title">
+                  <Footprints /> Pet Sitter - próximas visitas
                 </div>
               </div>
               <div className="card__body card__body--flush">
-                {todayBirthdays.length > 0 && renderBirthdaySection("Hoje", todayBirthdays, false)}
-                {upcomingBirthdays.length > 0 && renderBirthdaySection("Ainda este mês", upcomingBirthdays, false)}
-                {pastBirthdays.length > 0 && renderBirthdaySection("Já passaram", pastBirthdays, true)}
-                {monthBirthdays.length === 0 && (
-                  <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: 12 }}>
-                    Cadastre data de nascimento nos tutores e pets pra ver aqui.
+                {dashboard.petSitterVisits.length ? dashboard.petSitterVisits.map((visit, index) => (
+                  <div
+                    key={visit.id}
+                    style={{
+                      padding: "12px 16px",
+                      borderBottom:
+                        index < dashboard.petSitterVisits.length - 1 ? "1px solid var(--border)" : "0",
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{visit.pet}</div>
+                    <div className="subtle" style={{ fontSize: 11 }}>
+                      {visit.tutor}
+                    </div>
+                    <div className="mono muted" style={{ fontSize: 11, marginTop: 4 }}>
+                      {visit.time}
+                    </div>
+                  </div>
+                )) : (
+                  <div className="muted" style={{ padding: "12px 16px", fontSize: 13 }}>
+                    Nenhuma visita futura cadastrada.
                   </div>
                 )}
               </div>
@@ -373,31 +382,24 @@ export default async function DashboardPage({
 
             <section className="card">
               <div className="card__header">
-                <div className="card__title">
-                  <Footprints /> Pet Sitter - próximas visitas
+                <div>
+                  <div className="card__title">
+                    <Cake /> Aniversariantes de {monthLabel}
+                  </div>
+                  <div className="card__subtitle">
+                    {monthBirthdays.length === 0
+                      ? "Ninguém faz aniversário neste mês"
+                      : `${todayBirthdays.length} hoje · ${upcomingBirthdays.length} a chegar · ${pastBirthdays.length} já passaram`}
+                  </div>
                 </div>
               </div>
               <div className="card__body card__body--flush">
-                {dashboard.petSitterVisits.length ? dashboard.petSitterVisits.map((visit, index) => (
-                  <div
-                    key={visit.id}
-                    style={{
-                      padding: "12px 16px",
-                      borderBottom:
-                        index < dashboard.petSitterVisits.length - 1 ? "1px solid var(--border)" : "0",
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{visit.pet}</div>
-                    <div className="subtle" style={{ fontSize: 11 }}>
-                      {visit.tutor}
-                    </div>
-                    <div className="mono muted" style={{ fontSize: 11, marginTop: 4 }}>
-                      {visit.time}
-                    </div>
-                  </div>
-                )) : (
-                  <div className="muted" style={{ padding: "12px 16px", fontSize: 13 }}>
-                    Nenhuma visita futura cadastrada.
+                {todayBirthdays.length > 0 && renderBirthdaySection("Hoje", todayBirthdays, false)}
+                {upcomingBirthdays.length > 0 && renderBirthdaySection("Ainda este mês", upcomingBirthdays, false)}
+                {pastBirthdays.length > 0 && renderBirthdaySection("Já passaram", pastBirthdays, true)}
+                {monthBirthdays.length === 0 && (
+                  <div style={{ padding: "16px", textAlign: "center", color: "var(--muted)", fontSize: 12 }}>
+                    Cadastre data de nascimento nos tutores e pets pra ver aqui.
                   </div>
                 )}
               </div>
