@@ -9,6 +9,7 @@ import { getFinanceData } from "@/lib/app-data";
 import { brl } from "@/lib/money";
 import { sumPaidCents } from "@/lib/reservation-status";
 import { deleteFinancialEntryAction, markReservationPaidAction } from "./actions";
+import { EditarMovimentacaoModal } from "./editar-movimentacao-modal";
 import { FinanceMonthPicker } from "./finance-month-picker";
 import { NovaMovimentacaoModal } from "./nova-movimentacao-modal";
 
@@ -89,14 +90,17 @@ export default async function FinanceiroPage({
                     <td><StatusBadge status={entry.status} /></td>
                     <td className="table__num">{entry.amount}</td>
                     <td>
-                      <ConfirmForm
-                        action={deleteFinancialEntryAction.bind(null, entry.id)}
-                        message="Excluir este lançamento? Se estiver vinculado a uma reserva, o pagamento correspondente será removido e o saldo será recalculado."
-                      >
-                        <button className="btn btn--ghost btn--icon" type="submit" aria-label="Excluir lançamento" title="Excluir lançamento">
-                          <Trash2 />
-                        </button>
-                      </ConfirmForm>
+                      <div className="row" style={{ justifyContent: "flex-end", gap: 4 }}>
+                        <EditarMovimentacaoModal entry={entry} />
+                        <ConfirmForm
+                          action={deleteFinancialEntryAction.bind(null, entry.id)}
+                          message="Excluir este lançamento? Se estiver vinculado a uma reserva, o pagamento correspondente será removido e o saldo será recalculado."
+                        >
+                          <button className="btn btn--ghost btn--icon" type="submit" aria-label="Excluir lançamento" title="Excluir lançamento">
+                            <Trash2 />
+                          </button>
+                        </ConfirmForm>
+                      </div>
                     </td>
                   </tr>
                 ))}

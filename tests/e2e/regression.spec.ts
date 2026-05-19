@@ -154,13 +154,23 @@ test("AUDIT 09: register payment", async ({ page }) => {
 test("AUDIT 10: financeiro - create expense", async ({ page }) => {
   await login(page);
   await page.goto("/financeiro");
-  await page.fill('section#lancar-despesa input[name="category"]', "Auditoria E2E");
-  await page.fill('section#lancar-despesa input[name="entryDate"]', "2026-05-04");
-  await page.fill('section#lancar-despesa input[name="amountCents"]', "50,00");
-  await page.fill('section#lancar-despesa input[name="description"]', "Despesa e2e");
-  await page.locator('section#lancar-despesa').getByRole("button", { name: "Salvar despesa" }).click();
+  await page.getByRole("button", { name: /Adicionar movimenta/ }).click();
+  const createDialog = page.locator("dialog[open]");
+  await createDialog.locator('input[name="category"]').fill("Auditoria E2E");
+  await createDialog.locator('input[name="entryDate"]').fill("2026-05-04");
+  await createDialog.locator('input[name="amountCents"]').fill("50,00");
+  await createDialog.locator('input[name="description"]').fill("Despesa e2e");
+  await createDialog.getByRole("button", { name: /Salvar movimenta/ }).click();
   await expect(page).toHaveURL(/saved=1/, { timeout: 10000 });
   await expect(page.locator("table").getByText("Despesa e2e")).toBeVisible();
+
+  const entryRow = page.locator("tr", { hasText: "Despesa e2e" }).first();
+  await entryRow.getByRole("button", { name: "Editar lançamento" }).click();
+  const editDialog = page.locator("dialog[open]");
+  await editDialog.locator('select[name="method"]').selectOption("PIX");
+  await editDialog.getByRole("button", { name: "Salvar alterações" }).click();
+  await expect(page).toHaveURL(/saved=1/, { timeout: 10000 });
+  await expect(page.locator("tr", { hasText: "Despesa e2e" }).first()).toContainText("PIX");
 });
 
 test("AUDIT 11: financeiro - export CSV", async ({ page }) => {

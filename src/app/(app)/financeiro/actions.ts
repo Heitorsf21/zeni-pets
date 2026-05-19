@@ -6,10 +6,11 @@ import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { centsFieldStrict, optionalStringField, stringField } from "@/lib/forms";
+import { parseDateOnly } from "@/lib/date";
 import { derivePaymentStatus, sumPaidCents } from "@/lib/reservation-status";
 
 const VALID_KINDS = ["INCOME", "EXPENSE"] as const;
-const VALID_METHODS = ["PIX", "CASH", "CARD", "TRANSFER", "OTHER"] as const;
+const VALID_METHODS = ["PIX", "CASH", "CARD", "TRANSFER", "CREDIT", "OTHER"] as const;
 
 type FinancialEntryForDeletion = {
   id: string;
@@ -128,7 +129,7 @@ export async function createFinancialEntryAction(formData: FormData) {
       kind,
       category,
       description: optionalStringField(formData, "description"),
-      entryDate: new Date(stringField(formData, "entryDate") || new Date()),
+      entryDate: parseDateOnly(formData.get("entryDate")) ?? new Date(),
       amountCents,
       method,
       isManual: true,
@@ -137,6 +138,120 @@ export async function createFinancialEntryAction(formData: FormData) {
 
   revalidatePath("/financeiro");
   revalidatePath("/dashboard");
+  redirect("/financeiro?saved=1");
+}
+
+export async function updateFinancialEntryAction(id: string, formData: FormData) {
+  await requireUser();
+  const amountCents = centsFieldStrict(formData, "amountCents");
+  const category = stringField(formData, "category");
+  const entryDate = parseDateOnly(formData.get("entryDate"));
+  const kindRaw = stringField(formData, "kind");
+  const requestedKind = (VALID_KINDS as readonly string[]).includes(kindRaw)
+    ? (kindRaw as (typeof VALID_KINDS)[number])
+    : "EXPENSE";
+  const methodRaw = stringField(formData, "method");
+  const method = (VALID_METHODS as readonly string[]).includes(methodRaw)
+    ? (methodRaw as PaymentMethod)
+    : null;
+
+  if (!category || amountCents == null || amountCents <= 0 || !entryDate) {
+    redirect("/financeiro?error=dados-invalidos");
+  }
+
+  const result = await getPrisma().$transaction(async (tx) => {
+    const entry = await tx.financialEntry.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        reservationId: true,
+        kind: true,
+        amountCents: true,
+        method: true,
+        importRecordId: true,
+        entryDate: true,
+        createdAt: true,
+      },
+    });
+    if (!entry) return { ok: false as const, reason: "lancamento-nao-encontrado" };
+
+    const nextKind = entry.reservationId ? "INCOME" : requestedKind;
+    let tutorId: string | null = null;
+    let payment = null as { id: string } | null;
+
+    if (entry.reservationId && entry.kind === "INCOME") {
+      const entryWithReservationId = { ...entry, reservationId: entry.reservationId };
+      payment =
+        await findPaymentForFinancialEntry(tx, entryWithReservationId) ??
+        await findAmountOnlyPaymentForFinancialEntry(tx, entryWithReservationId);
+    }
+
+    await tx.financialEntry.update({
+      where: { id },
+      data: {
+        kind: nextKind,
+        category,
+        description: optionalStringField(formData, "description"),
+        entryDate,
+        amountCents,
+        method,
+        isManual: true,
+      },
+    });
+
+    if (entry.reservationId) {
+      const paymentData = {
+        amountCents,
+        method: method ?? "OTHER",
+        paidAt: entryDate,
+        notes: optionalStringField(formData, "description") ?? category,
+      };
+
+      if (payment) {
+        await tx.payment.update({ where: { id: payment.id }, data: paymentData });
+      } else {
+        await tx.payment.create({
+          data: {
+            reservationId: entry.reservationId,
+            status: "PAID",
+            ...paymentData,
+          },
+        });
+      }
+
+      const reservation = await tx.reservation.findUnique({
+        where: { id: entry.reservationId },
+        select: {
+          tutorId: true,
+          totalCents: true,
+          payments: { select: { status: true, amountCents: true } },
+        },
+      });
+      if (reservation) {
+        tutorId = reservation.tutorId;
+        const paidCents = sumPaidCents(reservation.payments);
+        await tx.reservation.update({
+          where: { id: entry.reservationId },
+          data: { paymentStatus: derivePaymentStatus(paidCents, reservation.totalCents) },
+        });
+      }
+    }
+
+    return { ok: true as const, reservationId: entry.reservationId, tutorId };
+  });
+
+  if (!result.ok) redirect(`/financeiro?error=${result.reason}`);
+
+  revalidatePath("/financeiro");
+  revalidatePath("/dashboard");
+  if (result.reservationId) {
+    revalidatePath("/reservas");
+    revalidatePath(`/reservas/${result.reservationId}`);
+  }
+  if (result.tutorId) {
+    revalidatePath(`/tutores/${result.tutorId}`);
+    revalidatePath(`/tutores/${result.tutorId}/ficha`);
+  }
   redirect("/financeiro?saved=1");
 }
 

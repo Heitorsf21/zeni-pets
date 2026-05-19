@@ -1,33 +1,47 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
-import { createFinancialEntryAction } from "./actions";
+import { updateFinancialEntryAction } from "./actions";
 
-export function NovaMovimentacaoModal() {
-  const [kind, setKind] = useState<"INCOME" | "EXPENSE">("EXPENSE");
+type FinanceEntryForEdit = {
+  id: string;
+  kind: "INCOME" | "EXPENSE";
+  category: string;
+  descriptionValue: string;
+  dateValue: string;
+  amountInput: string;
+  methodValue: string;
+  reservationId: string | null;
+};
+
+export function EditarMovimentacaoModal({ entry }: { entry: FinanceEntryForEdit }) {
+  const isReservationEntry = Boolean(entry.reservationId);
+  const [kind, setKind] = useState<"INCOME" | "EXPENSE">(isReservationEntry ? "INCOME" : entry.kind);
 
   return (
     <Modal
       trigger={
-        <button type="button" className="btn btn--primary">
-          <Plus /> Adicionar movimentação
+        <button type="button" className="btn btn--ghost btn--icon" aria-label="Editar lançamento" title="Editar lançamento">
+          <Pencil />
         </button>
       }
-      title="Nova movimentação"
+      title="Editar movimentação"
       width={560}
     >
-      <form className="form-grid" action={createFinancialEntryAction}>
+      <form className="form-grid" action={updateFinancialEntryAction.bind(null, entry.id)}>
+        {isReservationEntry ? <input type="hidden" name="kind" value="INCOME" /> : null}
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Tipo</span>
           <div className="row" style={{ gap: 8 }}>
             <label className="check" style={{ flex: 1 }}>
               <input
                 type="radio"
-                name="kind"
+                name={isReservationEntry ? undefined : "kind"}
                 value="INCOME"
                 checked={kind === "INCOME"}
+                disabled={isReservationEntry}
                 onChange={() => setKind("INCOME")}
               />{" "}
               Receita
@@ -35,9 +49,10 @@ export function NovaMovimentacaoModal() {
             <label className="check" style={{ flex: 1 }}>
               <input
                 type="radio"
-                name="kind"
+                name={isReservationEntry ? undefined : "kind"}
                 value="EXPENSE"
                 checked={kind === "EXPENSE"}
+                disabled={isReservationEntry}
                 onChange={() => setKind("EXPENSE")}
               />{" "}
               Despesa
@@ -46,24 +61,19 @@ export function NovaMovimentacaoModal() {
         </div>
         <label className="field">
           <span className="field__label">Categoria</span>
-          <input
-            className="input"
-            name="category"
-            placeholder={kind === "INCOME" ? "Serviço extra" : "Insumos"}
-            required
-          />
+          <input className="input" name="category" defaultValue={entry.category} required />
         </label>
         <label className="field">
           <span className="field__label">Data</span>
-          <input className="input" name="entryDate" type="date" required />
+          <input className="input" name="entryDate" type="date" defaultValue={entry.dateValue} required />
         </label>
         <label className="field">
           <span className="field__label">Valor</span>
-          <input className="input" name="amountCents" placeholder="0,00" required />
+          <input className="input" name="amountCents" defaultValue={entry.amountInput} required />
         </label>
         <label className="field">
           <span className="field__label">Forma de pagamento</span>
-          <select className="select" name="method" defaultValue="">
+          <select className="select" name="method" defaultValue={entry.methodValue}>
             <option value="">Não informar</option>
             <option value="PIX">PIX</option>
             <option value="CASH">Dinheiro</option>
@@ -75,11 +85,11 @@ export function NovaMovimentacaoModal() {
         </label>
         <label className="field" style={{ gridColumn: "1 / -1" }}>
           <span className="field__label">Descrição</span>
-          <input className="input" name="description" placeholder="Detalhe opcional" />
+          <input className="input" name="description" defaultValue={entry.descriptionValue} />
         </label>
         <div className="row" style={{ gridColumn: "1 / -1", justifyContent: "flex-end" }}>
           <button className="btn btn--primary" type="submit">
-            Salvar movimentação
+            Salvar alterações
           </button>
         </div>
       </form>

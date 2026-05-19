@@ -15,6 +15,7 @@ import {
   reservationEndDay,
   startOfDay,
   startOfMonth,
+  toDateInputValue,
   toDatetimeLocalValue,
 } from "@/lib/date";
 
@@ -31,6 +32,10 @@ const IMPORT_DETECTED_TYPES = [
   "CLIENT_FORM",
   "UNKNOWN",
 ] as const;
+
+function centsInputValue(cents: number) {
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
 
 function dbUnavailable(scope: string, error: unknown) {
   if (process.env.NODE_ENV !== "development") return;
@@ -968,13 +973,19 @@ export async function getFinanceData(
       entries: entries.map((entry) => ({
         id: entry.id,
         date: formatDateShort(entry.entryDate),
+        dateValue: toDateInputValue(entry.entryDate),
+        category: entry.category,
         description: entry.description ?? entry.category,
+        descriptionValue: entry.description ?? "",
         tutor: entry.kind === "EXPENSE" ? "-" : "Zeni Pets",
         method: entry.method ?? "-",
+        methodValue: entry.method ?? "",
         status: "PAID",
         amount: brl(entry.amountCents),
+        amountInput: centsInputValue(entry.amountCents),
         kind: entry.kind,
         isManual: entry.isManual,
+        reservationId: entry.reservationId,
       })),
       creditTransactions: creditTransactions.map((transaction) => ({
         id: transaction.id,
