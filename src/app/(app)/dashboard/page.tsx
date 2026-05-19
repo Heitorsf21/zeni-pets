@@ -8,7 +8,6 @@ import {
   MoreHorizontal,
   PawPrint,
   Sun,
-  Trash2,
   TrendingUp,
   Wallet,
   Footprints,
@@ -19,12 +18,12 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { PetRow } from "@/components/ui/pet-avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
-import { ConfirmForm } from "@/components/ui/confirm-form";
 import { getDashboardData, getReservationFormData, type MonthBirthday } from "@/lib/app-data";
 import { prepareRevenueChartData } from "@/lib/dashboard-chart";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
-import { deleteTaskAction, toggleTaskOccurrenceAction } from "./actions";
+import { toggleTaskOccurrenceAction } from "./actions";
 import { NovaTarefaModal } from "./nova-tarefa-modal";
+import { TaskActionsMenu } from "./task-actions-menu";
 import { NovaReservaModal } from "@/app/(app)/reservas/nova-reserva-modal";
 
 const metricIcons = { Bed, Sun, Wallet, AlertCircle };
@@ -338,7 +337,7 @@ export default async function DashboardPage({
               </div>
             </section>
 
-            <section className="card">
+            <section className="card task-card">
               <div className="card__header">
                 <div>
                   <div className="card__title">Tarefas do dia</div>
@@ -366,11 +365,15 @@ export default async function DashboardPage({
                         </div>
                       </button>
                     </form>
-                    <ConfirmForm action={deleteTaskAction.bind(null, occurrence.taskId)} message="Excluir esta tarefa em todos os dias?">
-                      <button className="btn btn--ghost btn--icon" type="submit" aria-label="Excluir tarefa" title="Excluir">
-                        <Trash2 />
-                      </button>
-                    </ConfirmForm>
+                    <TaskActionsMenu
+                      task={{
+                        id: occurrence.taskId,
+                        title: occurrence.label,
+                        description: occurrence.description,
+                        taskDateValue: occurrence.taskDateValue,
+                        endsAtValue: occurrence.endsAtValue,
+                      }}
+                    />
                   </div>
                 )) : (
                   <p className="muted" style={{ margin: 0, fontSize: 13 }}>

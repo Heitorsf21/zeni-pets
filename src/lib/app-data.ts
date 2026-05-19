@@ -15,6 +15,7 @@ import {
   reservationEndDay,
   startOfDay,
   startOfMonth,
+  toDatetimeLocalValue,
 } from "@/lib/date";
 
 const ACTIVE_RESERVATION_STATUSES = ["CONFIRMED", "IN_PROGRESS"] as const;
@@ -584,6 +585,8 @@ async function getTodayTasksData(today = new Date()) {
     taskId: occurrence.task.id,
     label: occurrence.task.title,
     description: occurrence.task.description,
+    taskDateValue: toDatetimeLocalValue(occurrence.task.taskDate),
+    endsAtValue: occurrence.task.endsAt ? toDatetimeLocalValue(occurrence.task.endsAt) : "",
     done: occurrence.status === "DONE",
     rangeLabel: occurrence.task.endsAt
       ? `Até ${formatDateShort(occurrence.task.endsAt)}`

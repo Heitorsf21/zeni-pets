@@ -89,16 +89,14 @@ export default async function FinanceiroPage({
                     <td><StatusBadge status={entry.status} /></td>
                     <td className="table__num">{entry.amount}</td>
                     <td>
-                      {entry.isManual ? (
-                        <ConfirmForm
-                          action={deleteFinancialEntryAction.bind(null, entry.id)}
-                          message="Excluir este lançamento manual?"
-                        >
-                          <button className="btn btn--ghost btn--icon" type="submit" aria-label="Excluir lançamento" title="Excluir lançamento">
-                            <Trash2 />
-                          </button>
-                        </ConfirmForm>
-                      ) : null}
+                      <ConfirmForm
+                        action={deleteFinancialEntryAction.bind(null, entry.id)}
+                        message="Excluir este lançamento? Se estiver vinculado a uma reserva, o pagamento correspondente será removido e o saldo será recalculado."
+                      >
+                        <button className="btn btn--ghost btn--icon" type="submit" aria-label="Excluir lançamento" title="Excluir lançamento">
+                          <Trash2 />
+                        </button>
+                      </ConfirmForm>
                     </td>
                   </tr>
                 ))}

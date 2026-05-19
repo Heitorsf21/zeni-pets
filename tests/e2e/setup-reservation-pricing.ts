@@ -101,13 +101,13 @@ async function main() {
   });
   await prisma.serviceType.upsert({
     where: { id: SERVICE_ID },
-    update: { name: SERVICE_NAME, kind: "BOARDING", isActive: true },
+    update: { name: SERVICE_NAME, kind: "BOARDING", isActive: false },
     create: {
       id: SERVICE_ID,
       name: SERVICE_NAME,
       slug: "hospedagem-pricing-e2e",
       kind: "BOARDING",
-      isActive: true,
+      isActive: false,
     },
   });
   await prisma.servicePriceRule.upsert({
@@ -122,7 +122,7 @@ async function main() {
       fixedFeeCents: null,
       perKmCents: null,
       hygieneFeeCents: null,
-      isActive: true,
+      isActive: false,
     },
     create: {
       id: RULE_ID,
@@ -131,7 +131,7 @@ async function main() {
       paymentMethod: "PIX",
       firstPetCents: 3500,
       additionalPetCents: 2000,
-      isActive: true,
+      isActive: false,
     },
   });
   await prisma.serviceType.upsert({

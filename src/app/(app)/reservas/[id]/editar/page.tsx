@@ -6,7 +6,11 @@ import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationDetailData, getReservationFormData } from "@/lib/app-data";
 import { toDateInputValue } from "@/lib/date";
 import { brl } from "@/lib/money";
-import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
+import {
+  toReservationSeasonOptions,
+  toReservationServiceOptions,
+  withReservationServiceSnapshots,
+} from "@/lib/reservation-form-options";
 import { updateReservationAction } from "../../actions";
 import { ReservationPeriodFields } from "../../reservation-period-fields";
 import { ReservationPetFields } from "../../reservation-pet-fields";
@@ -34,7 +38,16 @@ export default async function EditarReservaPage({
   ]);
   if (!reservation) notFound();
 
-  const serviceOptions = toReservationServiceOptions(formData.serviceTypes);
+  const serviceOptions = withReservationServiceSnapshots(
+    toReservationServiceOptions(formData.serviceTypes),
+    [
+      { serviceType: reservation.serviceType, priceRule: reservation.priceRule },
+      ...reservation.reservationPets.map((item) => ({
+        serviceType: item.serviceType,
+        priceRule: item.priceRule,
+      })),
+    ],
+  );
   const seasonOptions = toReservationSeasonOptions(formData.seasonPeriods);
   const update = updateReservationAction.bind(null, reservation.id);
 

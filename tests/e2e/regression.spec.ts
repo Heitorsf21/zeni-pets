@@ -308,7 +308,7 @@ test("AUDIT 20: /reservas listing renders with filters", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Aplicar filtros" })).toBeVisible();
 });
 
-test("AUDIT 21: dashboard task CRUD via modal - create, toggle, delete", async ({ page }) => {
+test("AUDIT 21: dashboard task CRUD via modal - create, toggle, edit, delete", async ({ page }) => {
   await login(page);
   await page.goto("/dashboard");
   // Open Nova tarefa modal
@@ -328,10 +328,21 @@ test("AUDIT 21: dashboard task CRUD via modal - create, toggle, delete", async (
   await taskRow.locator("button").first().click();
   await expect(taskRow.locator("span.subtle").first()).toContainText("Tarefa de teste e2e");
 
+  // Edit from the three-dot menu
+  await taskRow.getByRole("button", { name: /Ações da tarefa/ }).click();
+  await taskRow.getByRole("menuitem", { name: "Editar" }).click();
+  const editDialog = page.locator("dialog[open]");
+  await editDialog.locator('input[name="title"]').fill("Tarefa de teste e2e editada");
+  await editDialog.getByRole("button", { name: "Salvar tarefa" }).click();
+  await page.waitForURL(/saved=1/);
+  await expect(page.getByText("Tarefa de teste e2e editada")).toBeVisible();
+
   // Delete
+  const updatedTaskRow = page.locator(".row").filter({ hasText: "Tarefa de teste e2e editada" });
+  await updatedTaskRow.getByRole("button", { name: /Ações da tarefa/ }).click();
   page.once("dialog", (d) => d.accept());
-  await taskRow.getByRole("button", { name: "Excluir" }).click();
-  await expect(page.getByText("Tarefa de teste e2e")).not.toBeVisible();
+  await updatedTaskRow.getByRole("menuitem", { name: "Excluir" }).click();
+  await expect(page.getByText("Tarefa de teste e2e editada")).not.toBeVisible();
 });
 
 test("AUDIT 22: /valores creates ServiceType and PriceRule", async ({ page }) => {

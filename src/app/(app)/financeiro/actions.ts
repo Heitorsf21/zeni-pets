@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { centsFieldStrict, optionalStringField, stringField } from "@/lib/forms";
@@ -9,6 +10,101 @@ import { derivePaymentStatus, sumPaidCents } from "@/lib/reservation-status";
 
 const VALID_KINDS = ["INCOME", "EXPENSE"] as const;
 const VALID_METHODS = ["PIX", "CASH", "CARD", "TRANSFER", "OTHER"] as const;
+
+type FinancialEntryForDeletion = {
+  id: string;
+  reservationId: string | null;
+  kind: "INCOME" | "EXPENSE";
+  amountCents: number;
+  method: PaymentMethod | null;
+  importRecordId: string | null;
+  entryDate: Date;
+  createdAt: Date;
+};
+
+function dayWindow(date: Date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+async function findPaymentForFinancialEntry(
+  tx: Prisma.TransactionClient,
+  entry: FinancialEntryForDeletion & { reservationId: string },
+) {
+  if (entry.kind !== "INCOME") return null;
+
+  const baseWhere: Prisma.PaymentWhereInput = {
+    reservationId: entry.reservationId,
+    amountCents: entry.amountCents,
+    status: "PAID",
+    ...(entry.method ? { method: entry.method } : {}),
+  };
+
+  if (entry.importRecordId) {
+    const importedPayment = await tx.payment.findFirst({
+      where: { ...baseWhere, importRecordId: entry.importRecordId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (importedPayment) return importedPayment;
+  }
+
+  const { start, end } = dayWindow(entry.entryDate);
+  const sameDayPayment = await tx.payment.findFirst({
+    where: {
+      ...baseWhere,
+      OR: [
+        { paidAt: { gte: start, lte: end } },
+        { createdAt: { gte: start, lte: end } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (sameDayPayment) return sameDayPayment;
+
+  return tx.payment.findFirst({
+    where: baseWhere,
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+}
+
+async function findAmountOnlyPaymentForFinancialEntry(
+  tx: Prisma.TransactionClient,
+  entry: FinancialEntryForDeletion & { reservationId: string },
+) {
+  if (entry.kind !== "INCOME") return null;
+
+  const baseWhere: Prisma.PaymentWhereInput = {
+    reservationId: entry.reservationId,
+    amountCents: entry.amountCents,
+    status: "PAID",
+  };
+
+  const { start, end } = dayWindow(entry.entryDate);
+  const sameDayPayment = await tx.payment.findFirst({
+    where: {
+      ...baseWhere,
+      OR: [
+        { paidAt: { gte: start, lte: end } },
+        { createdAt: { gte: start, lte: end } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (sameDayPayment) return sameDayPayment;
+
+  return tx.payment.findFirst({
+    where: baseWhere,
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+}
 
 export async function createFinancialEntryAction(formData: FormData) {
   await requireUser();
@@ -46,19 +142,89 @@ export async function createFinancialEntryAction(formData: FormData) {
 
 export async function deleteFinancialEntryAction(id: string) {
   await requireUser();
-  const entry = await getPrisma().financialEntry.findUnique({
-    where: { id },
-    select: { isManual: true },
-  });
-  if (!entry) redirect("/financeiro?error=lancamento-nao-encontrado");
-  if (!entry.isManual) {
-    redirect("/financeiro?error=lancamento-automatico");
-  }
+  const result = await getPrisma().$transaction(async (tx) => {
+    const entry = await tx.financialEntry.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        reservationId: true,
+        kind: true,
+        amountCents: true,
+        method: true,
+        importRecordId: true,
+        entryDate: true,
+        createdAt: true,
+      },
+    });
+    if (!entry) return { ok: false as const, reason: "lancamento-nao-encontrado" };
 
-  await getPrisma().financialEntry.delete({ where: { id } });
+    let reservationId: string | null = null;
+    let tutorId: string | null = null;
+    let removedPayment = false;
+
+    if (entry.reservationId) {
+      reservationId = entry.reservationId;
+      const entryWithReservationId = { ...entry, reservationId: entry.reservationId };
+      const payment =
+        await findPaymentForFinancialEntry(tx, entryWithReservationId) ??
+        await findAmountOnlyPaymentForFinancialEntry(tx, entryWithReservationId);
+      if (payment) {
+        await tx.payment.delete({ where: { id: payment.id } });
+        removedPayment = true;
+      }
+    }
+
+    await tx.financialEntry.delete({ where: { id } });
+
+    if (reservationId) {
+      const reservation = await tx.reservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          tutorId: true,
+          totalCents: true,
+          payments: { select: { status: true, amountCents: true } },
+        },
+      });
+
+      if (reservation) {
+        tutorId = reservation.tutorId;
+        if (removedPayment && entry.method === "CREDIT") {
+          const creditUse = await tx.tutorCreditTransaction.findFirst({
+            where: {
+              reservationId,
+              tutorId: reservation.tutorId,
+              type: "CREDIT_USED",
+              amountCents: -Math.abs(entry.amountCents),
+            },
+            orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
+            select: { id: true },
+          });
+          if (creditUse) {
+            await tx.tutorCreditTransaction.delete({ where: { id: creditUse.id } });
+          }
+        }
+
+        const paidCents = sumPaidCents(reservation.payments);
+        await tx.reservation.update({
+          where: { id: reservationId },
+          data: { paymentStatus: derivePaymentStatus(paidCents, reservation.totalCents) },
+        });
+      }
+    }
+
+    return { ok: true as const, reservationId, tutorId };
+  });
+
+  if (!result.ok) redirect(`/financeiro?error=${result.reason}`);
 
   revalidatePath("/financeiro");
   revalidatePath("/dashboard");
+  revalidatePath("/reservas");
+  if (result.reservationId) revalidatePath(`/reservas/${result.reservationId}`);
+  if (result.tutorId) {
+    revalidatePath(`/tutores/${result.tutorId}`);
+    revalidatePath(`/tutores/${result.tutorId}/ficha`);
+  }
   redirect("/financeiro?deleted=1");
 }
 
