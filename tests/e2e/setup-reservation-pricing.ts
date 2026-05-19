@@ -10,14 +10,18 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Zenipets";
 const TUTOR_ID = "e2e-pricing-tutor";
 const PET_ID = "e2e-pricing-pet";
 const PET_2_ID = "e2e-pricing-pet-2";
+const RESERVATION_ID = "e2e-pricing-reservation";
 const SERVICE_ID = "e2e-pricing-boarding";
 const RULE_ID = "e2e-pricing-rule-pix";
+const DAYCARE_SERVICE_ID = "e2e-pricing-daycare";
+const DAYCARE_RULE_ID = "e2e-pricing-daycare-rule-pix";
 const TAXI_SERVICE_ID = "e2e-pricing-taxi";
 const TAXI_RULE_ID = "e2e-pricing-taxi-rule-pix";
 const TUTOR_NAME = "Pricing Tutor E2E";
 const PET_NAME = "Pricing Pet E2E";
 const PET_2_NAME = "Pricing Pet Extra E2E";
 const SERVICE_NAME = "Hospedagem Pricing E2E";
+const DAYCARE_SERVICE_NAME = "Creche Pricing E2E";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -30,8 +34,8 @@ const prisma = new PrismaClient({
 
 async function cleanup() {
   await prisma.reservation.deleteMany({ where: { tutorId: TUTOR_ID } });
-  await prisma.servicePriceRule.deleteMany({ where: { id: { in: [RULE_ID, TAXI_RULE_ID] } } });
-  await prisma.serviceType.deleteMany({ where: { id: { in: [SERVICE_ID, TAXI_SERVICE_ID] } } });
+  await prisma.servicePriceRule.deleteMany({ where: { id: { in: [RULE_ID, DAYCARE_RULE_ID, TAXI_RULE_ID] } } });
+  await prisma.serviceType.deleteMany({ where: { id: { in: [SERVICE_ID, DAYCARE_SERVICE_ID, TAXI_SERVICE_ID] } } });
   await prisma.pet.deleteMany({ where: { id: { in: [PET_ID, PET_2_ID] } } });
   await prisma.tutor.deleteMany({ where: { id: TUTOR_ID } });
 }
@@ -131,6 +135,41 @@ async function main() {
     },
   });
   await prisma.serviceType.upsert({
+    where: { id: DAYCARE_SERVICE_ID },
+    update: { name: DAYCARE_SERVICE_NAME, kind: "DAYCARE", isActive: true },
+    create: {
+      id: DAYCARE_SERVICE_ID,
+      name: DAYCARE_SERVICE_NAME,
+      slug: "creche-pricing-e2e",
+      kind: "DAYCARE",
+      isActive: true,
+    },
+  });
+  await prisma.servicePriceRule.upsert({
+    where: { id: DAYCARE_RULE_ID },
+    update: {
+      label: "Dia teste",
+      paymentMethod: "PIX",
+      firstPetCents: 3000,
+      additionalPetCents: 1500,
+      highSeasonFirstPetCents: null,
+      highSeasonAdditionalCents: null,
+      fixedFeeCents: null,
+      perKmCents: null,
+      hygieneFeeCents: null,
+      isActive: true,
+    },
+    create: {
+      id: DAYCARE_RULE_ID,
+      serviceTypeId: DAYCARE_SERVICE_ID,
+      label: "Dia teste",
+      paymentMethod: "PIX",
+      firstPetCents: 3000,
+      additionalPetCents: 1500,
+      isActive: true,
+    },
+  });
+  await prisma.serviceType.upsert({
     where: { id: TAXI_SERVICE_ID },
     update: { name: "Taxi Pet Transporte Principal E2E", kind: "TAXI_PET", isActive: true },
     create: {
@@ -162,6 +201,32 @@ async function main() {
       perKmCents: 250,
       hygieneFeeCents: 500,
       isActive: true,
+    },
+  });
+  await prisma.reservation.create({
+    data: {
+      id: RESERVATION_ID,
+      tutorId: TUTOR_ID,
+      serviceTypeId: SERVICE_ID,
+      priceRuleId: RULE_ID,
+      pricingPaymentMethod: "PIX",
+      pricingMode: "fixed",
+      status: "CONFIRMED",
+      paymentStatus: "PENDING",
+      startsAt: new Date(2026, 5, 7),
+      endsAt: new Date(2026, 5, 14),
+      notes: "Reserva hospedagem edit e2e",
+      baseAmountCents: 38500,
+      totalCents: 38500,
+      depositSuggestedCents: 19250,
+      depositDueCents: 19250,
+      balanceDueCents: 19250,
+      reservationPets: {
+        create: [
+          { petId: PET_ID, priceRole: "first_pet" },
+          { petId: PET_2_ID, priceRole: "additional_pet" },
+        ],
+      },
     },
   });
 }

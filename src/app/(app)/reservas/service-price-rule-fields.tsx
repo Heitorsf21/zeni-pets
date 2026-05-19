@@ -10,6 +10,7 @@ type PricingMode = "fixed" | "manual_daily" | "manual_total";
 type Props = {
   serviceTypes: ReservationServiceOption[];
   lockServiceType?: boolean;
+  defaultServiceTypeId?: string;
   defaultPricingMode?: PricingMode | "manual";
   defaultPriceRuleId?: string;
 };
@@ -29,27 +30,43 @@ function normalizeMode(mode: Props["defaultPricingMode"]): PricingMode {
   return mode ?? "fixed";
 }
 
+function resolveInitialService(
+  serviceTypes: ReservationServiceOption[],
+  defaultServiceTypeId?: string,
+  defaultPriceRuleId?: string,
+) {
+  return (
+    serviceTypes.find((service) => service.id === defaultServiceTypeId) ??
+    serviceTypes.find((service) => service.priceRules.some((rule) => rule.id === defaultPriceRuleId)) ??
+    serviceTypes[0] ??
+    null
+  );
+}
+
 export function ServicePriceRuleFields({
   serviceTypes,
   lockServiceType = false,
+  defaultServiceTypeId,
   defaultPricingMode,
   defaultPriceRuleId,
 }: Props) {
-  const firstService = serviceTypes[0] ?? null;
-  const firstRule = firstService ? selectDefaultPriceRule(firstService.priceRules) : null;
-  const [serviceTypeId, setServiceTypeId] = useState(firstService?.id ?? "");
-  const [priceRuleId, setPriceRuleId] = useState(defaultPriceRuleId ?? firstRule?.id ?? "");
+  const initialService = resolveInitialService(serviceTypes, defaultServiceTypeId, defaultPriceRuleId);
+  const initialRule =
+    initialService?.priceRules.find((rule) => rule.id === defaultPriceRuleId) ??
+    (initialService ? selectDefaultPriceRule(initialService.priceRules) : null);
+  const [serviceTypeId, setServiceTypeId] = useState(initialService?.id ?? "");
+  const [priceRuleId, setPriceRuleId] = useState(initialRule?.id ?? "");
   const [pricingMode, setPricingMode] = useState<PricingMode>(normalizeMode(defaultPricingMode));
 
   const selectedService = useMemo(
-    () => serviceTypes.find((service) => service.id === serviceTypeId) ?? firstService,
-    [firstService, serviceTypeId, serviceTypes],
+    () => serviceTypes.find((service) => service.id === serviceTypeId) ?? initialService,
+    [initialService, serviceTypeId, serviceTypes],
   );
   const rules = useMemo(
     () => sortPriceRules(selectedService?.priceRules ?? []),
     [selectedService?.priceRules],
   );
-  const selectedRule = rules.find((rule) => rule.id === priceRuleId) ?? rules[0] ?? null;
+  const selectedRule = rules.find((rule) => rule.id === priceRuleId) ?? selectDefaultPriceRule(rules);
 
   return (
     <>

@@ -10,6 +10,7 @@ type Props = {
   defaultStartsAt?: string;
   defaultEndsAt?: string;
   defaultVisitDates?: string[];
+  defaultServiceTypeId?: string;
   forcedKind?: string;
 };
 
@@ -19,10 +20,11 @@ export function ReservationPeriodFields({
   defaultStartsAt,
   defaultEndsAt,
   defaultVisitDates,
+  defaultServiceTypeId,
   forcedKind,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [serviceTypeId, setServiceTypeId] = useState<string>(serviceTypes[0]?.id ?? "");
+  const [serviceTypeId, setServiceTypeId] = useState<string>(defaultServiceTypeId ?? serviceTypes[0]?.id ?? "");
 
   useEffect(() => {
     if (forcedKind) return;

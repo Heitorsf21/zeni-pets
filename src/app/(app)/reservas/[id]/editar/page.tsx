@@ -100,6 +100,7 @@ export default async function EditarReservaPage({
             <div className="card__body form-grid">
               <ServicePriceRuleFields
                 serviceTypes={serviceOptions}
+                defaultServiceTypeId={reservation.serviceType.id}
                 defaultPricingMode={(reservation.pricingMode === "manual_daily" || reservation.pricingMode === "manual_total" ? reservation.pricingMode : "fixed") as "fixed" | "manual_daily" | "manual_total"}
                 defaultPriceRuleId={reservation.priceRule?.id}
               />
@@ -123,6 +124,7 @@ export default async function EditarReservaPage({
                 defaultStartsAt={startsValue}
                 defaultEndsAt={isPetSitting ? startsValue : endsValue}
                 defaultVisitDates={reservation.visitDates.map((v) => toDateInputValue(v.date))}
+                defaultServiceTypeId={reservation.serviceType.id}
               />
               <label className="field">
                 <span className="field__label">Valor por diária (manual)</span>
@@ -172,6 +174,8 @@ export default async function EditarReservaPage({
               serviceTypes={serviceOptions}
               seasonPeriods={seasonOptions}
               depositPercent={formData.settings?.depositPercent ?? 50}
+              defaultServiceTypeId={reservation.serviceType.id}
+              defaultPriceRuleId={reservation.priceRule?.id}
             />
             <label className="check" form="reservation-edit-form">
               <input

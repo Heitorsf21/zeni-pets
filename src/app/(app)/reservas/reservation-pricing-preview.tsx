@@ -24,6 +24,8 @@ type Props = {
   highSeasonSurchargePercent?: number;
   formId?: string;
   compact?: boolean;
+  defaultServiceTypeId?: string;
+  defaultPriceRuleId?: string;
 };
 
 function parseLocalDate(value: FormDataEntryValue | null) {
@@ -53,6 +55,8 @@ export function ReservationPricingPreview({
   highSeasonSurchargePercent = 0,
   formId,
   compact = false,
+  defaultServiceTypeId,
+  defaultPriceRuleId,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [snapshot, setSnapshot] = useState<FormData | null>(null);
@@ -93,13 +97,16 @@ export function ReservationPricingPreview({
 
   const summary = useMemo(() => {
     const formData = snapshot ?? new FormData();
+    const serviceTypeId = String(formData.get("serviceTypeId") ?? "") || defaultServiceTypeId;
+    const priceRuleId = String(formData.get("priceRuleId") ?? "") || defaultPriceRuleId;
     const selectedService =
-      serviceTypes.find((service) => service.id === String(formData.get("serviceTypeId") ?? "")) ??
+      serviceTypes.find((service) => service.id === serviceTypeId) ??
+      serviceTypes.find((service) => service.priceRules.some((rule) => rule.id === priceRuleId)) ??
       serviceTypes[0] ??
       null;
     const rules = sortPriceRules(selectedService?.priceRules ?? []);
     const selectedRule =
-      rules.find((rule) => rule.id === String(formData.get("priceRuleId") ?? "")) ??
+      rules.find((rule) => rule.id === priceRuleId) ??
       (selectedService ? selectDefaultPriceRule(rules) : null);
 
     const kind = selectedService?.kind ?? "";
@@ -254,7 +261,7 @@ export function ReservationPricingPreview({
       additionalCents,
       ...totals,
     };
-  }, [depositPercent, highSeasonSurchargePercent, seasons, serviceTypes, snapshot]);
+  }, [defaultPriceRuleId, defaultServiceTypeId, depositPercent, highSeasonSurchargePercent, seasons, serviceTypes, snapshot]);
 
   return (
     <div
