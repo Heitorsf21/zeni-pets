@@ -132,7 +132,8 @@ export function ReservationPricingPreview({
       endsAtExclusive = startsAt ? addOneDay(startsAt) : null;
     } else {
       startsAt = parseLocalDate(formData.get("startsAt"));
-      endsAtExclusive = parseLocalDate(formData.get("endsAt"));
+      const selectedEnd = parseLocalDate(formData.get("endsAt"));
+      endsAtExclusive = selectedEnd ? addOneDay(selectedEnd) : null;
     }
 
     const petCount = formData.getAll("petIds").filter(Boolean).length;

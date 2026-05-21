@@ -66,6 +66,10 @@ export function addDays(date: Date, days: number) {
   return copy;
 }
 
+export function inclusiveEndDateToExclusiveEnd(date: Date) {
+  return addDays(date, 1);
+}
+
 export function toDateInputValue(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;

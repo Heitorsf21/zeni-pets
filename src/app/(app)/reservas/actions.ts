@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { getTutorCreditBalance } from "@/lib/credits";
 import { getPrisma } from "@/lib/db";
 import { centsField, centsFieldStrict, optionalStringField, selectedValues, stringField } from "@/lib/forms";
-import { addDays, parseDateOnly } from "@/lib/date";
+import { addDays, inclusiveEndDateToExclusiveEnd, parseDateOnly } from "@/lib/date";
 import {
   calculateManualDailyBaseCents,
   calculatePriceRuleStayCents,
@@ -211,7 +211,7 @@ function parseReservationPeriod(formData: FormData, kind: string | null): Parsed
   const start = parseDateOnly(formData.get("startsAt"));
   const end = parseDateOnly(formData.get("endsAt"));
   if (!start || !end) return { startsAt: null, endsAt: null, visitDates: [] };
-  return { startsAt: start, endsAt: end, visitDates: [] };
+  return { startsAt: start, endsAt: inclusiveEndDateToExclusiveEnd(end), visitDates: [] };
 }
 
 type PetOverride = {
