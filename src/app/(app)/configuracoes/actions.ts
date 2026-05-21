@@ -14,6 +14,7 @@ import {
   revokeGoogleTokens,
   stopCalendarWatch,
   upsertReservationEvent,
+  updateGoogleEventTitle,
 } from "@/lib/google/calendar";
 
 type SelectedGoogleConnection = GoogleCalendarConnection & { googleCalendarId: string };
@@ -118,6 +119,74 @@ export async function syncFutureReservationsToGoogleAction() {
   revalidatePath("/configuracoes");
   revalidatePath("/agenda");
   redirect(`/configuracoes?google=sync-complete&synced=${synced}&failed=${failed}`);
+}
+
+export async function updateGoogleEventTitlesAction() {
+  await requireUser();
+  const prisma = getPrisma();
+  const connection = await prisma.googleCalendarConnection.findFirst({
+    where: { googleCalendarId: { not: null } },
+    orderBy: { connectedAt: "desc" },
+  });
+  if (!connection?.googleCalendarId) redirect("/configuracoes?error=calendario-obrigatorio");
+
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      googleEventId: { not: null },
+      googleCalendarId: { not: null },
+    },
+    include: {
+      serviceType: true,
+      reservationPets: { include: { pet: true } },
+    },
+    orderBy: { startsAt: "asc" },
+  });
+
+  let synced = 0;
+  let failed = 0;
+  for (const reservation of reservations) {
+    if (!reservation.googleEventId || !reservation.googleCalendarId) continue;
+
+    try {
+      const event = await updateGoogleEventTitle({
+        tokens: connection,
+        calendarId: reservation.googleCalendarId,
+        googleEventId: reservation.googleEventId,
+        title: formatPetServiceTitle({
+          petNames: reservation.reservationPets.map((item) => item.pet.name),
+          serviceName: reservation.serviceType.name,
+        }),
+      });
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: {
+          googleEventEtag: event.etag ?? reservation.googleEventEtag,
+          googleLastSyncedAt: new Date(),
+          syncConflict: false,
+          syncConflictReason: null,
+        },
+      });
+      synced++;
+    } catch (error) {
+      failed++;
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: {
+          syncConflict: true,
+          syncConflictReason: error instanceof Error ? error.message : "Falha ao atualizar nome do evento no Google Agenda",
+        },
+      });
+    }
+  }
+
+  await prisma.googleCalendarConnection.update({
+    where: { id: connection.id },
+    data: { lastSyncedAt: new Date() },
+  });
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/agenda");
+  redirect(`/configuracoes?google=title-sync-complete&synced=${synced}&failed=${failed}`);
 }
 
 export async function reactivateGoogleWebhookAction() {

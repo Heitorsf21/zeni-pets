@@ -9,6 +9,7 @@ import {
   reactivateGoogleWebhookAction,
   saveGoogleCalendarAction,
   syncFutureReservationsToGoogleAction,
+  updateGoogleEventTitlesAction,
   updateBusinessSettingsAction,
 } from "./actions";
 
@@ -95,6 +96,11 @@ export default async function ConfiguracoesPage({
                   {sp.synced ?? "0"} reservas sincronizadas, {sp.failed ?? "0"} falhas.
                 </div>
               ) : null}
+              {sp.google === "title-sync-complete" ? (
+                <div className="alert alert--success" role="status">
+                  {sp.synced ?? "0"} nomes de eventos atualizados, {sp.failed ?? "0"} falhas.
+                </div>
+              ) : null}
               {config.googleCalendarError ? (
                 <div className="alert alert--danger" role="alert">{config.googleCalendarError}</div>
               ) : null}
@@ -134,6 +140,11 @@ export default async function ConfiguracoesPage({
               <form action={syncFutureReservationsToGoogleAction}>
                 <button className="btn" type="submit" disabled={!config.googleConnection?.googleCalendarId}>
                   Sincronizar reservas futuras
+                </button>
+              </form>
+              <form action={updateGoogleEventTitlesAction}>
+                <button className="btn" type="submit" disabled={!config.googleConnection?.googleCalendarId}>
+                  Atualizar nomes dos eventos
                 </button>
               </form>
               <form action={reactivateGoogleWebhookAction}>

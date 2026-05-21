@@ -163,6 +163,25 @@ export async function upsertReservationEvent(input: {
   return response.data;
 }
 
+export async function updateGoogleEventTitle(input: {
+  tokens: { accessTokenCipher?: string | null; refreshTokenCipher?: string | null };
+  calendarId: string;
+  googleEventId: string;
+  title: string;
+}) {
+  const calendar = google.calendar({
+    version: "v3",
+    auth: clientFromStoredTokens(input.tokens),
+  });
+  const response = await calendar.events.patch({
+    calendarId: input.calendarId,
+    eventId: input.googleEventId,
+    requestBody: { summary: input.title },
+    sendUpdates: "none",
+  });
+  return response.data;
+}
+
 export async function cancelReservationEvent(input: {
   tokens: { accessTokenCipher?: string | null; refreshTokenCipher?: string | null };
   calendarId: string;
