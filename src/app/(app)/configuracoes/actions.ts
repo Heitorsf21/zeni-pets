@@ -6,6 +6,7 @@ import type { GoogleCalendarConnection } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { centsField, intField, optionalStringField, stringField } from "@/lib/forms";
+import { formatPetServiceTitle } from "@/lib/reservation-title";
 import {
   createCalendarWatch,
   encryptGoogleChannelToken,
@@ -192,7 +193,10 @@ async function syncFutureReservationsToGoogle(
         googleEventId: reservation.googleEventId,
         reservation: {
           reservationId: reservation.id,
-          title: `${reservation.serviceType.name} - ${reservation.reservationPets.map((item) => item.pet.name).join(", ")}`,
+          title: formatPetServiceTitle({
+            petNames: reservation.reservationPets.map((item) => item.pet.name),
+            serviceName: reservation.serviceType.name,
+          }),
           startsAt: reservation.startsAt,
           endsAt: reservation.endsAt,
           tutorEmail: reservation.tutor.email,

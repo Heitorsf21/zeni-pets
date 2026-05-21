@@ -8,6 +8,7 @@ import { getTutorCreditBalance } from "@/lib/credits";
 import { getPrisma } from "@/lib/db";
 import { centsField, centsFieldStrict, optionalStringField, selectedValues, stringField } from "@/lib/forms";
 import { addDays, parseDateOnly } from "@/lib/date";
+import { formatPetServiceTitle } from "@/lib/reservation-title";
 import {
   calculateManualDailyBaseCents,
   calculatePriceRuleStayCents,
@@ -891,7 +892,10 @@ async function syncReservationToGoogleIfConfigured(reservationId: string) {
       googleEventId: reservation.googleEventId,
       reservation: {
         reservationId,
-        title: `${reservation.serviceType.name} - ${reservation.reservationPets.map((item) => item.pet.name).join(", ")}`,
+        title: formatPetServiceTitle({
+          petNames: reservation.reservationPets.map((item) => item.pet.name),
+          serviceName: reservation.serviceType.name,
+        }),
         startsAt: reservation.startsAt,
         endsAt: reservation.endsAt,
         tutorEmail: reservation.tutor.email,

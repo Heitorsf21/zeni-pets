@@ -5,13 +5,14 @@ describe("Google Calendar event mapping", () => {
   it("keeps Zeni reservation id in private extended properties", () => {
     const event = reservationToGoogleEvent({
       reservationId: "reservation-1",
-      title: "Hospedagem - Theo",
+      title: "Theo - Hospedagem",
       startsAt: new Date(2026, 3, 27),
       endsAt: new Date(2026, 4, 2),
       inviteTutor: false,
       tutorEmail: "tutor@example.com",
     });
 
+    expect(event.summary).toBe("Theo - Hospedagem");
     expect(event.extendedProperties.private.zeniReservationId).toBe("reservation-1");
     expect(event.attendees).toBeUndefined();
   });
@@ -19,7 +20,7 @@ describe("Google Calendar event mapping", () => {
   it("emits all-day events using start.date and end.date (exclusive)", () => {
     const event = reservationToGoogleEvent({
       reservationId: "reservation-3",
-      title: "Hospedagem - Rex",
+      title: "Rex - Hospedagem",
       startsAt: new Date(2026, 4, 7),
       endsAt: new Date(2026, 4, 15),
       inviteTutor: false,
@@ -33,7 +34,7 @@ describe("Google Calendar event mapping", () => {
   it("adds attendees only when tutor invite is enabled", () => {
     const event = reservationToGoogleEvent({
       reservationId: "reservation-2",
-      title: "Creche - Pipoca",
+      title: "Pipoca - Creche",
       startsAt: new Date(2026, 3, 28),
       endsAt: new Date(2026, 3, 29),
       inviteTutor: true,

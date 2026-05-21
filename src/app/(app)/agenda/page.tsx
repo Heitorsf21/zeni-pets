@@ -9,8 +9,10 @@ import {
   getUpcomingReservationsData,
 } from "@/lib/app-data";
 import { contrastingTextColor } from "@/lib/colors";
+import { formatPetServiceTitle } from "@/lib/reservation-title";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { NovaReservaModal } from "@/app/(app)/reservas/nova-reserva-modal";
+import { AgendaReservationChip } from "./agenda-reservation-chip";
 import { AgendaMonthPicker } from "./month-picker";
 
 const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
@@ -141,21 +143,27 @@ export default async function AgendaPage({
                       <div className="cal__date">{date}</div>
                       <div className="cal__bars">
                         {visible.map((reservation) => {
-                          const label = `${reservation.tutor} - ${reservation.type}`;
+                          const pets = reservation.pets || "Sem pet vinculado";
+                          const label = formatPetServiceTitle({
+                            petNames: pets.split(","),
+                            serviceName: reservation.type,
+                          });
                           return (
-                            <Link
-                              className="cal__bar"
-                              href={`/reservas/${reservation.id}`}
+                            <AgendaReservationChip
+                              instanceId={`${reservation.id}-${dayKey}`}
+                              reservationId={reservation.id}
                               key={reservation.id}
-                              title={label}
-                              aria-label={`Reserva de ${reservation.tutor} - ${reservation.type} - ${reservation.period}`}
-                              style={{
-                                backgroundColor: reservation.serviceColor,
-                                color: contrastingTextColor(reservation.serviceColor),
-                              }}
-                            >
-                              {label}
-                            </Link>
+                              label={label}
+                              pets={pets}
+                              tutor={reservation.tutor}
+                              service={reservation.type}
+                              period={reservation.period}
+                              status={reservation.status}
+                              payment={reservation.payment}
+                              value={reservation.value}
+                              backgroundColor={reservation.serviceColor}
+                              color={contrastingTextColor(reservation.serviceColor)}
+                            />
                           );
                         })}
                         {hidden > 0 ? (
