@@ -71,7 +71,7 @@ export default async function ReservationDetailPage({
             <div className="card__header">
               <div>
                 <div className="card__title"><CalendarClock /> Dados da reserva</div>
-                <div className="card__subtitle">{formatReservationPeriod(reservation.startsAt, reservation.endsAt)}</div>
+                <div className="card__subtitle">{formatReservationPeriod(reservation.startsAt, reservation.endsAt, reservation.serviceType.kind)}</div>
               </div>
               <div className="row">
                 <StatusBadge status={reservation.status} />

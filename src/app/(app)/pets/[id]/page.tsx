@@ -336,7 +336,7 @@ export default async function PetDetailPage({
                         {reservations.length ? reservations.slice(0, 6).map((reservation) => (
                           <tr key={reservation.id}>
                             <td className="mono" style={{ fontSize: 12 }}>
-                              {formatReservationPeriod(reservation.startsAt, reservation.endsAt)}
+                              {formatReservationPeriod(reservation.startsAt, reservation.endsAt, reservation.serviceType.kind)}
                             </td>
                             <td><Link href={`/reservas/${reservation.id}`}>{reservation.serviceType.name}</Link></td>
                             <td className="mono">{calculateChargeableStayUnits(reservation.startsAt, reservation.endsAt)}</td>

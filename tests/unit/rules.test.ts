@@ -25,15 +25,14 @@ describe("reservation calculation rules", () => {
     ).toBe(1);
   });
 
-  it("treats a date-only inclusive range as N+1 nights when endsAt is the day after the last selected day", () => {
-    // User picks 07/05 to 14/05 in the date input. The action stores
-    // startsAt=07/05 00:00 and endsAt=15/05 00:00 (exclusive). That covers 8 days.
+  it("treats the boarding check-out date as the exclusive end for nights", () => {
+    // User picks 22/06 to 24/06. Billing is 22->23 and 23->24: 2 nights.
     expect(
       calculateChargeableStayUnits(
-        new Date(2026, 4, 7),
-        new Date(2026, 4, 15),
+        new Date(2026, 5, 22),
+        new Date(2026, 5, 24),
       ),
-    ).toBe(8);
+    ).toBe(2);
   });
 
   it("treats a PET_SITTING visit as a single unit", () => {

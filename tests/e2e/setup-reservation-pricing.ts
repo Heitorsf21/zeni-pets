@@ -214,7 +214,7 @@ async function main() {
       status: "CONFIRMED",
       paymentStatus: "PENDING",
       startsAt: new Date(2026, 5, 7),
-      endsAt: new Date(2026, 5, 15),
+      endsAt: new Date(2026, 5, 14),
       notes: "Reserva hospedagem edit e2e",
       baseAmountCents: 38500,
       totalCents: 38500,

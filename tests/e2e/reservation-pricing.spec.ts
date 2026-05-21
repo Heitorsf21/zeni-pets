@@ -59,4 +59,5 @@ test("keeps saved boarding service selected when editing a reservation", async (
 
   const summary = page.locator("aside", { hasText: "Resumo atualizado" });
   await expect(summary.locator(".row", { hasText: /Servi[cç]o/ })).toContainText("Hospedagem Pricing E2E");
+  await expect(summary.locator(".row", { hasText: /Diárias/ })).toContainText("7");
 });

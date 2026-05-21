@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Topbar } from "@/components/layout/topbar";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { getReservationDetailData, getReservationFormData } from "@/lib/app-data";
-import { toDateInputValue } from "@/lib/date";
+import { reservationEndDay, toDateInputValue } from "@/lib/date";
 import { brl } from "@/lib/money";
 import {
   toReservationSeasonOptions,
@@ -53,10 +53,7 @@ export default async function EditarReservaPage({
 
   const isPetSitting = reservation.serviceType.kind === "PET_SITTING";
   const startsValue = toDateInputValue(reservation.startsAt);
-  // endsAt is stored as the day AFTER the last selected day (exclusive); subtract one for display.
-  const endsDisplay = new Date(reservation.endsAt);
-  endsDisplay.setDate(endsDisplay.getDate() - 1);
-  const endsValue = toDateInputValue(endsDisplay);
+  const endsValue = toDateInputValue(reservationEndDay(reservation.endsAt, reservation.serviceType.kind));
 
   const defaultOverrides = Object.fromEntries(
     reservation.reservationPets

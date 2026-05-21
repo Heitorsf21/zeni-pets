@@ -196,7 +196,7 @@ export default async function TutorDetailPage({
                     {recentReservations.length ? recentReservations.map((reservation) => (
                       <tr key={reservation.id}>
                         <td className="mono" style={{ fontSize: 12 }}>
-                          {formatReservationPeriod(reservation.startsAt, reservation.endsAt)}
+                          {formatReservationPeriod(reservation.startsAt, reservation.endsAt, reservation.serviceType.kind)}
                         </td>
                         <td>
                           <Link href={`/reservas/${reservation.id}`}>

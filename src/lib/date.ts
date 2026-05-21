@@ -66,10 +66,6 @@ export function addDays(date: Date, days: number) {
   return copy;
 }
 
-export function inclusiveEndDateToExclusiveEnd(date: Date) {
-  return addDays(date, 1);
-}
-
 export function toDateInputValue(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -83,25 +79,31 @@ export function formatDateOnly(date: Date) {
   }).format(date);
 }
 
+function isMidnight(date: Date) {
+  return (
+    date.getHours() === 0 &&
+    date.getMinutes() === 0 &&
+    date.getSeconds() === 0 &&
+    date.getMilliseconds() === 0
+  );
+}
+
 /**
- * Reservations store endsAt as the start of the day AFTER the last selected day
- * (exclusive). For display, subtract one day so the user sees the last day inclusive.
- * Legacy data created with datetime-local kept a wall-clock time — leave it untouched.
+ * Daycare and pet sitting store endsAt as the day after the selected date.
+ * Boarding stores endsAt as the actual check-out date and exclusive billing boundary.
  */
-export function reservationEndDay(endsAt: Date): Date {
+export function reservationEndDay(endsAt: Date, kind?: string | null): Date {
   if (
-    endsAt.getHours() === 0 &&
-    endsAt.getMinutes() === 0 &&
-    endsAt.getSeconds() === 0 &&
-    endsAt.getMilliseconds() === 0
+    (kind === "DAYCARE" || kind === "PET_SITTING") &&
+    isMidnight(endsAt)
   ) {
     return addDays(endsAt, -1);
   }
   return endsAt;
 }
 
-export function formatReservationPeriod(startsAt: Date, endsAt: Date): string {
-  const endDisplay = reservationEndDay(endsAt);
+export function formatReservationPeriod(startsAt: Date, endsAt: Date, kind?: string | null): string {
+  const endDisplay = reservationEndDay(endsAt, kind);
   const start = formatDateOnly(startsAt);
   const end = formatDateOnly(endDisplay);
   return start === end ? start : `${start} - ${end}`;
