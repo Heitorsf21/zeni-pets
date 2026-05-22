@@ -100,6 +100,11 @@ export function businessDateKey(date: Date, timeZone = BUSINESS_TIME_ZONE) {
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
 }
 
+export function businessDateParts(date: Date, timeZone = BUSINESS_TIME_ZONE) {
+  const parts = zonedParts(date, timeZone);
+  return { year: parts.year, month: parts.month, day: parts.day };
+}
+
 export function parseBusinessDateKey(value: string, timeZone = BUSINESS_TIME_ZONE) {
   const parsed = parseDateKey(value);
   if (!parsed) return null;

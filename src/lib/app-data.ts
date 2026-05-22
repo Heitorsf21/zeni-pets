@@ -7,6 +7,7 @@ import { sortPriceRules } from "@/lib/pricing";
 import { refreshReservationLifecycleStatuses, sumPaidCents } from "@/lib/reservation-status";
 import { getGoogleEnvStatus } from "@/lib/google/env";
 import {
+  businessDateParts,
   businessDayBounds,
   endOfMonth,
   formatDateShort,
@@ -794,8 +795,7 @@ export async function getDashboardData() {
 }
 
 export async function getTodayBirthdayTutorsData(now: Date = new Date()) {
-  const month = now.getMonth() + 1;
-  const day = now.getDate();
+  const current = businessDateParts(now);
   try {
     const tutors = await getPrisma().tutor.findMany({
       where: { birthDate: { not: null }, status: "ACTIVE" },
@@ -804,11 +804,11 @@ export async function getTodayBirthdayTutorsData(now: Date = new Date()) {
     return tutors
       .filter((tutor) => {
         if (!tutor.birthDate) return false;
-        return tutor.birthDate.getMonth() + 1 === month && tutor.birthDate.getDate() === day;
+        return tutor.birthDate.getUTCMonth() + 1 === current.month && tutor.birthDate.getUTCDate() === current.day;
       })
       .map((tutor) => {
         const yearsCompleted = tutor.birthDate
-          ? Math.max(now.getFullYear() - tutor.birthDate.getFullYear(), 0)
+          ? Math.max(current.year - tutor.birthDate.getUTCFullYear(), 0)
           : null;
         return {
           id: tutor.id,
@@ -838,8 +838,7 @@ export type MonthBirthday = {
 };
 
 export async function getMonthBirthdaysData(now: Date = new Date()): Promise<MonthBirthday[]> {
-  const currentMonth = now.getMonth();
-  const currentDay = now.getDate();
+  const current = businessDateParts(now);
   try {
     const [tutors, pets] = await Promise.all([
       getPrisma().tutor.findMany({
@@ -853,9 +852,9 @@ export async function getMonthBirthdaysData(now: Date = new Date()): Promise<Mon
     ]);
 
     function mapItem(kind: "tutor" | "pet", id: string, name: string, birthDate: Date, tutorName?: string): MonthBirthday | null {
-      if (birthDate.getMonth() !== currentMonth) return null;
-      const dayOfMonth = birthDate.getDate();
-      const daysUntil = dayOfMonth - currentDay;
+      if (birthDate.getUTCMonth() + 1 !== current.month) return null;
+      const dayOfMonth = birthDate.getUTCDate();
+      const daysUntil = dayOfMonth - current.day;
       return {
         id,
         kind,
@@ -864,7 +863,7 @@ export async function getMonthBirthdaysData(now: Date = new Date()): Promise<Mon
         birthDate,
         dayOfMonth,
         daysUntil,
-        ageAtBirthday: now.getFullYear() - birthDate.getFullYear(),
+        ageAtBirthday: current.year - birthDate.getUTCFullYear(),
         alreadyHappenedThisMonth: daysUntil < 0,
       };
     }

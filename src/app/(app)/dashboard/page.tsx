@@ -20,6 +20,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { FlashMessage } from "@/components/ui/flash-message";
 import { getDashboardData, getReservationFormData, type MonthBirthday } from "@/lib/app-data";
 import { prepareRevenueChartData } from "@/lib/dashboard-chart";
+import { BUSINESS_TIME_ZONE, businessDateParts } from "@/lib/date";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { toggleTaskOccurrenceAction } from "./actions";
 import { NovaTarefaModal } from "./nova-tarefa-modal";
@@ -71,8 +72,10 @@ export default async function DashboardPage({
   const occupancyWidth = Math.max(0, Math.min(occupancy, 100));
   const capacityLabel = `Capacidade do hotel: ${dashboard.hostedCount} de ${dashboard.capacity} vagas ocupadas (${occupancy}%).`;
   const today = new Date();
-  const revenueChart = prepareRevenueChartData(dashboard.monthlyRevenue, today.getFullYear());
+  const todayParts = businessDateParts(today);
+  const revenueChart = prepareRevenueChartData(dashboard.monthlyRevenue, todayParts.year);
   const todayLabel = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BUSINESS_TIME_ZONE,
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -83,7 +86,7 @@ export default async function DashboardPage({
   const todayBirthdays = monthBirthdays.filter((b) => b.daysUntil === 0);
   const upcomingBirthdays = monthBirthdays.filter((b) => b.daysUntil > 0);
   const pastBirthdays = monthBirthdays.filter((b) => b.daysUntil < 0);
-  const monthLabel = MONTH_LABELS_FULL[today.getMonth()];
+  const monthLabel = MONTH_LABELS_FULL[todayParts.month - 1];
 
   return (
     <>

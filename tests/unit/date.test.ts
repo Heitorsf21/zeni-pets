@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   businessDateKey,
+  businessDateParts,
   businessDayBounds,
   formatReservationPeriod,
   normalizeDateOnlyBoundary,
@@ -19,6 +20,7 @@ describe("reservation date helpers", () => {
     const { start, end } = businessDayBounds(now);
 
     expect(businessDateKey(now)).toBe("2026-05-21");
+    expect(businessDateParts(now)).toEqual({ year: 2026, month: 5, day: 21 });
     expect(start.toISOString()).toBe("2026-05-21T03:00:00.000Z");
     expect(end.toISOString()).toBe("2026-05-22T02:59:59.999Z");
   });
