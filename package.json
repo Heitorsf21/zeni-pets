@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "prisma migrate deploy && prisma generate && next build",
+    "build": "node scripts/prisma-migrate-deploy.mjs && prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "db:docker:up": "docker compose up -d postgres",
