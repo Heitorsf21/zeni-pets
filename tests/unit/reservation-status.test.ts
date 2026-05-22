@@ -264,6 +264,26 @@ describe("automatic reservation lifecycle", () => {
     ).toBe(false);
   });
 
+  it("does not auto-start a legacy UTC-midnight reservation before the Brazil start date begins", () => {
+    expect(
+      shouldAutoStartReservation({
+        now: new Date("2026-05-22T02:30:00.000Z"),
+        startsAt: new Date("2026-05-22T00:00:00.000Z"),
+        endsAt: new Date("2026-05-24T00:00:00.000Z"),
+        currentStatus: "CONFIRMED",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldAutoStartReservation({
+        now: new Date("2026-05-22T03:00:00.000Z"),
+        startsAt: new Date("2026-05-22T00:00:00.000Z"),
+        endsAt: new Date("2026-05-24T00:00:00.000Z"),
+        currentStatus: "CONFIRMED",
+      }),
+    ).toBe(true);
+  });
+
   it("creates a reservation already in progress when start has passed", () => {
     expect(
       deriveInitialReservationStatus({

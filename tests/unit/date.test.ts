@@ -1,11 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
+  businessDateKey,
+  businessDayBounds,
   formatReservationPeriod,
+  normalizeDateOnlyBoundary,
+  parseDateOnly,
   reservationEndDay,
   toDateInputValue,
 } from "@/lib/date";
 
 describe("reservation date helpers", () => {
+  it("parses date-only form values at the start of the Brazil business day", () => {
+    expect(parseDateOnly("2026-05-22")?.toISOString()).toBe("2026-05-22T03:00:00.000Z");
+  });
+
+  it("keeps Brazil day bounds when the server UTC date has already advanced", () => {
+    const now = new Date("2026-05-22T02:30:00.000Z");
+    const { start, end } = businessDayBounds(now);
+
+    expect(businessDateKey(now)).toBe("2026-05-21");
+    expect(start.toISOString()).toBe("2026-05-21T03:00:00.000Z");
+    expect(end.toISOString()).toBe("2026-05-22T02:59:59.999Z");
+  });
+
+  it("interprets legacy UTC-midnight reservation dates as Brazil date boundaries", () => {
+    expect(normalizeDateOnlyBoundary(new Date("2026-05-22T00:00:00.000Z")).toISOString())
+      .toBe("2026-05-22T03:00:00.000Z");
+  });
+
   it("keeps the selected boarding check-out date visible", () => {
     const checkout = new Date(2026, 5, 24);
 

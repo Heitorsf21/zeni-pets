@@ -1,4 +1,5 @@
 import { getPrisma } from "@/lib/db";
+import { normalizeDateOnlyBoundary } from "@/lib/date";
 
 export type ReservationStatus = "REQUESTED" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 export type PaymentStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
@@ -27,10 +28,13 @@ export function shouldAutoStartReservation(input: {
   endsAt: Date;
   currentStatus: ReservationStatus;
 }) {
+  const startsAt = normalizeDateOnlyBoundary(input.startsAt);
+  const endsAt = normalizeDateOnlyBoundary(input.endsAt);
+
   return (
     AUTO_START_STATUSES.includes(input.currentStatus) &&
-    input.startsAt.getTime() <= input.now.getTime() &&
-    input.endsAt.getTime() > input.now.getTime()
+    startsAt.getTime() <= input.now.getTime() &&
+    endsAt.getTime() > input.now.getTime()
   );
 }
 
@@ -53,12 +57,29 @@ export function deriveInitialReservationStatus(input: {
 }
 
 export async function refreshReservationLifecycleStatuses(now = new Date()) {
-  return getPrisma().reservation.updateMany({
+  const candidates = await getPrisma().reservation.findMany({
     where: {
       status: { in: AUTO_START_STATUSES },
       startsAt: { lte: now },
       endsAt: { gt: now },
     },
+    select: { id: true, status: true, startsAt: true, endsAt: true },
+  });
+  const ids = candidates
+    .filter((reservation) =>
+      shouldAutoStartReservation({
+        now,
+        startsAt: reservation.startsAt,
+        endsAt: reservation.endsAt,
+        currentStatus: reservation.status as ReservationStatus,
+      }),
+    )
+    .map((reservation) => reservation.id);
+
+  if (!ids.length) return { count: 0 };
+
+  return getPrisma().reservation.updateMany({
+    where: { id: { in: ids } },
     data: { status: "IN_PROGRESS" },
   });
 }
@@ -71,8 +92,8 @@ export function deriveReservationStatus(input: DeriveStatusInput): DeriveStatusO
   }
 
   const now = input.now.getTime();
-  const start = input.startsAt.getTime();
-  const end = input.endsAt.getTime();
+  const start = normalizeDateOnlyBoundary(input.startsAt).getTime();
+  const end = normalizeDateOnlyBoundary(input.endsAt).getTime();
 
   if (now < start) {
     if (input.currentStatus === "REQUESTED") return { status: "REQUESTED", paymentStatus };

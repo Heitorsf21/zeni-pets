@@ -7,11 +7,12 @@ import { sortPriceRules } from "@/lib/pricing";
 import { refreshReservationLifecycleStatuses, sumPaidCents } from "@/lib/reservation-status";
 import { getGoogleEnvStatus } from "@/lib/google/env";
 import {
-  endOfDay,
+  businessDayBounds,
   endOfMonth,
   formatDateShort,
   formatDateOnly,
   formatReservationPeriod,
+  normalizeDateOnlyBoundary,
   reservationEndDay,
   startOfDay,
   startOfMonth,
@@ -573,8 +574,7 @@ async function getMonthlyRevenueData(referenceDate = new Date()) {
 }
 
 async function getTodayTasksData(today = new Date()) {
-  const dayStart = startOfDay(today);
-  const dayEnd = endOfDay(today);
+  const { start: dayStart, end: dayEnd } = businessDayBounds(today);
   const occurrences = await getPrisma().taskOccurrence.findMany({
     where: {
       occurrenceDate: { gte: dayStart, lte: dayEnd },
@@ -597,6 +597,17 @@ async function getTodayTasksData(today = new Date()) {
       ? `Até ${formatDateShort(occurrence.task.endsAt)}`
       : null,
   }));
+}
+
+function reservationOverlapsDay(
+  reservation: { startsAt: Date; endsAt: Date },
+  dayStart: Date,
+  dayEnd: Date,
+) {
+  const startsAt = normalizeDateOnlyBoundary(reservation.startsAt);
+  const endsAt = normalizeDateOnlyBoundary(reservation.endsAt);
+
+  return startsAt.getTime() <= dayEnd.getTime() && endsAt.getTime() >= dayStart.getTime();
 }
 
 async function getUpcomingPetSitterVisitsData() {
@@ -625,8 +636,7 @@ async function getUpcomingPetSitterVisitsData() {
 
 export async function getDashboardData() {
   const today = new Date();
-  const dayStart = startOfDay(today);
-  const dayEnd = endOfDay(today);
+  const { start: dayStart, end: dayEnd } = businessDayBounds(today);
   const monthStart = startOfMonth(today);
   const monthEnd = endOfMonth(today);
 
@@ -635,7 +645,7 @@ export async function getDashboardData() {
     const [
       settings,
       activeReservations,
-      daycareToday,
+      daycareTodayReservations,
       monthIncome,
       pendingReservations,
       monthlyRevenue,
@@ -658,12 +668,13 @@ export async function getDashboardData() {
             reservationPets: { include: { pet: true } },
           },
         }),
-        getPrisma().reservation.count({
+        getPrisma().reservation.findMany({
           where: {
             serviceType: { kind: "DAYCARE" },
             startsAt: { lte: dayEnd },
             endsAt: { gte: dayStart },
           },
+          select: { startsAt: true, endsAt: true },
         }),
         getPrisma().financialEntry.aggregate({
           where: { kind: "INCOME", entryDate: { gte: monthStart, lte: monthEnd } },
@@ -680,7 +691,14 @@ export async function getDashboardData() {
         getMonthBirthdaysData(today),
       ]);
 
-    const hostedPets = activeReservations
+    const activeReservationsToday = activeReservations.filter((reservation) =>
+      reservationOverlapsDay(reservation, dayStart, dayEnd),
+    );
+    const daycareToday = daycareTodayReservations.filter((reservation) =>
+      reservationOverlapsDay(reservation, dayStart, dayEnd),
+    ).length;
+
+    const hostedPets = activeReservationsToday
       .flatMap((reservation) =>
         reservation.reservationPets.map((item) => ({
           reservationPetId: item.id,
