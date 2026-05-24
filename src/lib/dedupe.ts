@@ -53,6 +53,17 @@ export function normalizePhone(value: string | null | undefined) {
   return digits.replace(/^55/, "");
 }
 
+export function normalizedTutorPhones(input: {
+  phone?: string | null;
+  secondaryPhone?: string | null;
+}) {
+  return withoutDuplicates(
+    [input.phone, input.secondaryPhone]
+      .map((phone) => normalizePhone(phone))
+      .filter((phone) => phone.length >= 8),
+  );
+}
+
 export function firstNameKey(value: string | null | undefined) {
   return normalizeDedupeName(value).split(" ")[0] ?? "";
 }
@@ -82,6 +93,8 @@ function loadTutorsForDedupe(db: Db) {
       name: true,
       email: true,
       phone: true,
+      secondaryPhone: true,
+      secondaryPhoneNote: true,
       document: true,
       birthDate: true,
       address: true,
@@ -134,12 +147,13 @@ function tutorCandidateSummary(group: TutorForDedupe[], reason: string) {
     items: group.map((tutor) => ({
       id: tutor.id,
       name: tutor.name,
-      subtitle: tutor.phone || tutor.email || "Sem contato",
+      subtitle: tutor.phone || tutor.secondaryPhone || tutor.email || "Sem contato",
       evidence: [
         `${tutor._count.pets} pets`,
         `${tutor._count.reservations} reservas`,
         tutor.email ? `email: ${tutor.email}` : "sem email",
         tutor.phone ? `tel: ${tutor.phone}` : "sem telefone",
+        tutor.secondaryPhone ? `tel 2: ${tutor.secondaryPhone}` : "sem segundo telefone",
       ],
     })),
   } satisfies DedupeCandidateView["summary"];
@@ -167,7 +181,7 @@ export function tutorCanonicalSort(a: TutorForDedupe, b: TutorForDedupe) {
     item._count.reservations * 100 +
     item._count.pets * 20 +
     item._count.tasks * 10 +
-    (item.phone ? 5 : 0) +
+    (item.phone || item.secondaryPhone ? 5 : 0) +
     (item.email ? 5 : 0) +
     (/\(/.test(item.name) ? -3 : 0);
   return score(b) - score(a) || a.createdAt.getTime() - b.createdAt.getTime();
@@ -200,11 +214,16 @@ export async function buildTutorDedupeCandidates(db: Db): Promise<CandidateInput
     });
   }
 
+  const tutorPhoneEntries = tutors.flatMap((tutor) =>
+    normalizedTutorPhones(tutor).map((phone) => ({ tutor, phone })),
+  );
   for (const [key, group] of groupBy(
-    tutors.filter((tutor) => normalizePhone(tutor.phone).length >= 8),
-    (tutor) => `${firstNameKey(tutor.name)}|${normalizePhone(tutor.phone)}`,
+    tutorPhoneEntries,
+    (entry) => `${firstNameKey(entry.tutor.name)}|${entry.phone}`,
   )) {
-    const ids = group.map((item) => item.id);
+    const tutorsInGroup = withoutDuplicates(group.map((entry) => entry.tutor));
+    if (tutorsInGroup.length < 2) continue;
+    const ids = tutorsInGroup.map((item) => item.id);
     const setKey = idSetKey(ids);
     if (seen.has(setKey)) continue;
     seen.add(setKey);
@@ -213,7 +232,7 @@ export async function buildTutorDedupeCandidates(db: Db): Promise<CandidateInput
       groupKey: `tutor-phone:${key}`,
       confidence: 0.9,
       candidateIds: ids,
-      summary: tutorCandidateSummary([...group].sort(tutorCanonicalSort), "Primeiro nome e telefone coincidem."),
+      summary: tutorCandidateSummary([...tutorsInGroup].sort(tutorCanonicalSort), "Primeiro nome e telefone coincidem."),
     });
   }
 
@@ -341,6 +360,8 @@ function firstValue<T>(current: T | null | undefined, alternatives: Array<T | nu
 export type TutorMergeField =
   | "email"
   | "phone"
+  | "secondaryPhone"
+  | "secondaryPhoneNote"
   | "document"
   | "birthDate"
   | "address"
@@ -383,6 +404,8 @@ export async function mergeTutors(input: {
         name: true,
         email: true,
         phone: true,
+        secondaryPhone: true,
+        secondaryPhoneNote: true,
         document: true,
         birthDate: true,
         address: true,
@@ -421,6 +444,16 @@ export async function mergeTutors(input: {
       data: {
         email: pick("email", (tutor) => tutor.email, firstValue(canonical.email, duplicates.map((tutor) => tutor.email))),
         phone: pick("phone", (tutor) => tutor.phone, firstValue(canonical.phone, duplicates.map((tutor) => tutor.phone))),
+        secondaryPhone: pick(
+          "secondaryPhone",
+          (tutor) => tutor.secondaryPhone,
+          firstValue(canonical.secondaryPhone, duplicates.map((tutor) => tutor.secondaryPhone)),
+        ),
+        secondaryPhoneNote: pick(
+          "secondaryPhoneNote",
+          (tutor) => tutor.secondaryPhoneNote,
+          firstValue(canonical.secondaryPhoneNote, duplicates.map((tutor) => tutor.secondaryPhoneNote)),
+        ),
         document: pick("document", (tutor) => tutor.document, firstValue(canonical.document, duplicates.map((tutor) => tutor.document))),
         birthDate: pick("birthDate", (tutor) => tutor.birthDate, firstValue(canonical.birthDate, duplicates.map((tutor) => tutor.birthDate))),
         address: pick("address", (tutor) => tutor.address, firstValue(canonical.address, duplicates.map((tutor) => tutor.address))),

@@ -16,6 +16,8 @@ export type TutorRow = {
   id: string;
   name: string;
   phone: string;
+  secondaryPhone: string;
+  secondaryPhoneNote: string;
   email: string;
   pets: string;
   reservations: number;
@@ -27,6 +29,8 @@ export type TutorRow = {
 const FIELD_LABELS: Record<TutorMergeFieldDiff["field"], string> = {
   email: "E-mail",
   phone: "Telefone",
+  secondaryPhone: "Segundo telefone",
+  secondaryPhoneNote: "Obs. segundo telefone",
   document: "CPF/RG",
   birthDate: "Nascimento",
   address: "Endereço",
@@ -62,7 +66,7 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
     const q = deferredQuery.trim().toLowerCase();
     if (!q) return tutors;
     return tutors.filter((tutor) =>
-      [tutor.name, tutor.phone, tutor.email, tutor.pets]
+      [tutor.name, tutor.phone, tutor.secondaryPhone, tutor.secondaryPhoneNote, tutor.email, tutor.pets]
         .some((field) => field && field.toLowerCase().includes(q))
     );
   }, [tutors, deferredQuery]);
@@ -159,7 +163,7 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
             <input
               className="input"
               type="search"
-              placeholder="Buscar por nome, telefone, e-mail ou pet"
+              placeholder="Buscar por nome, telefone, e-mail, observação ou pet"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               style={{ paddingLeft: 32, width: "100%" }}
@@ -231,7 +235,15 @@ export function TutoresListClient({ tutors }: { tutors: TutorRow[] }) {
                     <div className="subtle">{tutor.email}</div>
                   </Link>
                 </td>
-                <td>{tutor.phone}</td>
+                <td>
+                  <div className="mono">{tutor.phone || "-"}</div>
+                  {tutor.secondaryPhone ? (
+                    <div className="subtle mono" style={{ fontSize: 12 }}>{tutor.secondaryPhone}</div>
+                  ) : null}
+                  {tutor.secondaryPhoneNote ? (
+                    <div className="subtle" style={{ fontSize: 11 }}>{tutor.secondaryPhoneNote}</div>
+                  ) : null}
+                </td>
                 <td>{tutor.pets}</td>
                 <td className="mono">{tutor.reservations}</td>
                 <td>{tutor.since}</td>

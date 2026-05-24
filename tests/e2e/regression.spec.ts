@@ -63,13 +63,18 @@ test("AUDIT 04: create tutor via modal, persists and renders on list", async ({ 
   const dialog = page.locator("dialog[open]");
   await dialog.locator('input[name="name"]').fill(TUTOR_NAME);
   await dialog.locator('input[name="phone"]').fill("11988887777");
+  await dialog.locator('input[name="secondaryPhone"]').fill("11977776666");
+  await dialog.locator('input[name="secondaryPhoneNote"]').fill("Contato alternativo e2e");
   await dialog.locator('input[name="address"]').fill("Rua de Teste, 1");
   await dialog.locator('textarea[name="notes"]').fill("Criado pelo teste de auditoria");
   await dialog.getByRole("button", { name: "Salvar tutor" }).click();
   await page.waitForURL(/tutores\/[0-9a-f-]+\/ficha/);
   await expect(page.getByRole("heading", { name: new RegExp(TUTOR_NAME) }).first()).toBeVisible();
+  await expect(page.getByText("11977776666")).toBeVisible();
+  await expect(page.getByText("Contato alternativo e2e")).toBeVisible();
   await page.goto("/tutores");
   await expect(page.locator("table").getByText(TUTOR_NAME)).toBeVisible();
+  await expect(page.locator("table").getByText("11977776666")).toBeVisible();
 });
 
 test("AUDIT 05: edit tutor and toggle status", async ({ page }) => {
@@ -77,13 +82,17 @@ test("AUDIT 05: edit tutor and toggle status", async ({ page }) => {
   await page.goto("/tutores");
   await page.locator("table").getByText(TUTOR_NAME).click();
   await page.waitForURL(/tutores\/[0-9a-f-]+/);
-  // Update form (scope to #editar to avoid input clashes with modals on the page)
-  const editForm = page.locator("section#editar form").first();
+  await page.getByRole("button", { name: "Editar" }).first().click();
+  const editForm = page.locator("dialog[open] form").first();
   await editForm.locator('input[name="name"]').fill(TUTOR_NAME_UPDATED);
   await editForm.locator('input[name="phone"]').fill("11900001111");
+  await editForm.locator('input[name="secondaryPhone"]').fill("11922223333");
+  await editForm.locator('input[name="secondaryPhoneNote"]').fill("Mae do tutor e2e");
   await editForm.locator('input[name="document"]').fill("12345678900");
   await editForm.getByRole("button", { name: "Salvar ficha" }).click();
   await expect(page.getByRole("heading", { name: new RegExp(TUTOR_NAME_UPDATED) }).first()).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText("11922223333")).toBeVisible();
+  await expect(page.getByText("Mae do tutor e2e")).toBeVisible();
 
   // Toggle status (Inativar -> Reativar)
   await page.getByRole("button", { name: /Inativar tutor/ }).click();
@@ -129,10 +138,18 @@ test("AUDIT 08: create reservation via modal", async ({ page }) => {
   await dialog.locator('input[name="startsAt"]').fill("2026-06-01T10:00");
   await dialog.locator('input[name="endsAt"]').fill("2026-06-03T18:00");
   await dialog.locator('input[name="baseAmountCents"]').fill("R$ 200,00");
+  await dialog.getByRole("button", { name: "Adicionar tarefa" }).click();
+  await dialog.locator('input[name="reservationTaskTitle"]').fill("Dar medicamento e2e");
+  const today = new Date();
+  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  await dialog.locator('input[name="reservationTaskDate"]').fill(todayDate);
   await dialog.locator('textarea[name="notes"]').fill("Reserva e2e auditoria");
   await dialog.getByRole("button", { name: "Salvar reserva" }).click();
   await page.waitForURL(/reservas\/[0-9a-f-]+/, { timeout: 15000 });
   await expect(page.getByText("Reserva e2e auditoria")).toBeVisible();
+  await expect(page.locator("tr", { hasText: "Dar medicamento e2e" })).toContainText(PET_NAME_UPDATED);
+  await page.goto("/dashboard");
+  await expect(page.getByText(`${PET_NAME_UPDATED} · Dar medicamento e2e`)).toBeVisible({ timeout: 10000 });
 });
 
 test("AUDIT 09: register payment", async ({ page }) => {

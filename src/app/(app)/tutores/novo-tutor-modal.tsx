@@ -20,8 +20,16 @@ export function NovoTutorModal() {
           <input className="input" name="name" required autoFocus />
         </label>
         <label className="field">
-          <span className="field__label">Telefone</span>
+          <span className="field__label">Telefone principal</span>
           <input className="input" name="phone" />
+        </label>
+        <label className="field">
+          <span className="field__label">Segundo telefone</span>
+          <input className="input" name="secondaryPhone" />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Observação do segundo telefone</span>
+          <input className="input" name="secondaryPhoneNote" />
         </label>
         <label className="field">
           <span className="field__label">CPF/RG</span>

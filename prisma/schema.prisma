@@ -164,6 +164,8 @@ model Tutor {
   name                 String
   email                String?
   phone                String?
+  secondaryPhone       String?
+  secondaryPhoneNote   String?
   document             String?
   birthDate            DateTime?
   address              String?

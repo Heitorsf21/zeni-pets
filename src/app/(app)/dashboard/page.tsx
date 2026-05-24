@@ -361,7 +361,9 @@ export default async function DashboardPage({
                       >
                         <input type="checkbox" checked={occurrence.done} readOnly />
                         <div>
-                          <span className={occurrence.done ? "subtle" : ""}>{occurrence.label}</span>
+                          <span className={occurrence.done ? "subtle" : ""}>
+                            {occurrence.petLabel ? `${occurrence.petLabel} · ${occurrence.label}` : occurrence.label}
+                          </span>
                           {occurrence.rangeLabel ? (
                             <span className="subtle" style={{ marginLeft: 8, fontSize: 11 }}>{occurrence.rangeLabel}</span>
                           ) : null}

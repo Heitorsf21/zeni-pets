@@ -10,6 +10,8 @@ type Tutor = {
   name: string;
   email: string | null;
   phone: string | null;
+  secondaryPhone: string | null;
+  secondaryPhoneNote: string | null;
   document: string | null;
   cep: string | null;
   birthDate: Date | null;
@@ -53,8 +55,16 @@ export function EditarTutorModal({
           <input className="input" name="name" defaultValue={tutor.name} required autoFocus />
         </label>
         <label className="field">
-          <span className="field__label">Telefone</span>
+          <span className="field__label">Telefone principal</span>
           <input className="input" name="phone" defaultValue={tutor.phone ?? ""} />
+        </label>
+        <label className="field">
+          <span className="field__label">Segundo telefone</span>
+          <input className="input" name="secondaryPhone" defaultValue={tutor.secondaryPhone ?? ""} />
+        </label>
+        <label className="field" style={{ gridColumn: "1 / -1" }}>
+          <span className="field__label">Observação do segundo telefone</span>
+          <input className="input" name="secondaryPhoneNote" defaultValue={tutor.secondaryPhoneNote ?? ""} />
         </label>
         <label className="field">
           <span className="field__label">E-mail</span>

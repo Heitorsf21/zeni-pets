@@ -20,6 +20,7 @@ import {
   toDateInputValue,
   toDatetimeLocalValue,
 } from "@/lib/date";
+import { taskPetLabel } from "@/lib/tasks";
 
 const ACTIVE_RESERVATION_STATUSES = ["CONFIRMED", "IN_PROGRESS"] as const;
 const MONTH_LABELS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -78,6 +79,8 @@ export async function getTutorsData() {
       id: tutor.id,
       name: tutor.name,
       phone: tutor.phone ?? "",
+      secondaryPhone: tutor.secondaryPhone ?? "",
+      secondaryPhoneNote: tutor.secondaryPhoneNote ?? "",
       email: tutor.email ?? "",
       pets: tutor.pets.map((pet) => pet.name).join(", ") || "-",
       reservations: tutor.reservations.length,
@@ -581,7 +584,18 @@ async function getTodayTasksData(today = new Date()) {
       occurrenceDate: { gte: dayStart, lte: dayEnd },
       task: { status: { not: "CANCELLED" } },
     },
-    include: { task: true },
+    include: {
+      task: {
+        include: {
+          pet: true,
+          reservation: {
+            include: {
+              reservationPets: { include: { pet: true } },
+            },
+          },
+        },
+      },
+    },
     orderBy: [{ status: "asc" }, { occurrenceDate: "asc" }],
     take: 24,
   });
@@ -590,6 +604,7 @@ async function getTodayTasksData(today = new Date()) {
     id: occurrence.id,
     taskId: occurrence.task.id,
     label: occurrence.task.title,
+    petLabel: taskPetLabel(occurrence.task),
     description: occurrence.task.description,
     taskDateValue: toDatetimeLocalValue(occurrence.task.taskDate),
     endsAtValue: occurrence.task.endsAt ? toDatetimeLocalValue(occurrence.task.endsAt) : "",

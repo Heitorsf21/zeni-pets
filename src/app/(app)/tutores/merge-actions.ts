@@ -14,6 +14,8 @@ import {
 const MERGE_FIELDS: readonly TutorMergeField[] = [
   "email",
   "phone",
+  "secondaryPhone",
+  "secondaryPhoneNote",
   "document",
   "birthDate",
   "address",
@@ -26,6 +28,8 @@ export type TutorMergePreviewItem = {
   name: string;
   email: string | null;
   phone: string | null;
+  secondaryPhone: string | null;
+  secondaryPhoneNote: string | null;
   document: string | null;
   birthDate: string | null;
   address: string | null;
@@ -76,6 +80,8 @@ export async function previewMergeTutorsAction(ids: string[]): Promise<TutorMerg
       name: true,
       email: true,
       phone: true,
+      secondaryPhone: true,
+      secondaryPhoneNote: true,
       document: true,
       birthDate: true,
       address: true,
@@ -101,6 +107,8 @@ export async function previewMergeTutorsAction(ids: string[]): Promise<TutorMerg
     name: tutor.name,
     email: tutor.email,
     phone: tutor.phone,
+    secondaryPhone: tutor.secondaryPhone,
+    secondaryPhoneNote: tutor.secondaryPhoneNote,
     document: tutor.document,
     birthDate: tutor.birthDate ? tutor.birthDate.toISOString() : null,
     address: tutor.address,
@@ -127,7 +135,12 @@ export async function previewMergeTutorsAction(ids: string[]): Promise<TutorMerg
   if (documents.size > 1) {
     warnings.push("Os tutores selecionados tem documentos (CPF/RG) diferentes. Verifique antes de mesclar.");
   }
-  const phones = new Set(items.map((tutor) => tutor.phone?.replace(/\D/g, "")).filter((p): p is string => Boolean(p && p.length >= 8)));
+  const phones = new Set(
+    items
+      .flatMap((tutor) => [tutor.phone, tutor.secondaryPhone])
+      .map((phone) => phone?.replace(/\D/g, ""))
+      .filter((p): p is string => Boolean(p && p.length >= 8)),
+  );
   if (phones.size > 1) {
     warnings.push("Os telefones cadastrados sao diferentes. Confirme qual e o correto.");
   }

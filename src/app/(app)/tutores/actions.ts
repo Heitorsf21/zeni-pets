@@ -29,6 +29,8 @@ export async function createTutorAction(formData: FormData) {
     data: {
       name,
       phone: optionalStringField(formData, "phone"),
+      secondaryPhone: optionalStringField(formData, "secondaryPhone"),
+      secondaryPhoneNote: optionalStringField(formData, "secondaryPhoneNote"),
       email: optionalStringField(formData, "email"),
       document: optionalStringField(formData, "document"),
       address: optionalStringField(formData, "address"),
@@ -52,6 +54,8 @@ export async function updateTutorAction(id: string, formData: FormData) {
     data: {
       name,
       phone: optionalStringField(formData, "phone"),
+      secondaryPhone: optionalStringField(formData, "secondaryPhone"),
+      secondaryPhoneNote: optionalStringField(formData, "secondaryPhoneNote"),
       email: optionalStringField(formData, "email"),
       document: optionalStringField(formData, "document"),
       address: optionalStringField(formData, "address"),

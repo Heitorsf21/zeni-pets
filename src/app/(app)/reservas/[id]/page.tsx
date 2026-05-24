@@ -12,6 +12,7 @@ import { brl } from "@/lib/money";
 import { toReservationSeasonOptions, toReservationServiceOptions } from "@/lib/reservation-form-options";
 import { sumPaidCents } from "@/lib/reservation-status";
 import { sumCreditBalance } from "@/lib/credits";
+import { taskPetLabel } from "@/lib/tasks";
 import {
   deleteReservationAction,
   registerPaymentAction,
@@ -151,19 +152,30 @@ export default async function ReservationDetailPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {reservation.tasks.length ? reservation.tasks.map((task) => (
-                    <tr key={task.id}>
-                      <td>
-                        <strong>{task.title}</strong>
-                        {task.description ? <div className="muted">{task.description}</div> : null}
-                      </td>
-                      <td>{task.pet ? <Link href={`/pets/${task.pet.id}/ficha`}>{task.pet.name}</Link> : "-"}</td>
-                      <td className="mono subtle">{formatDateOnly(task.taskDate)}</td>
-                      <td className="muted">
-                        {task.endsAt ? `Até ${formatDateOnly(task.endsAt)}` : `${task.occurrences.length} ocorrência`}
-                      </td>
-                    </tr>
-                  )) : (
+                  {reservation.tasks.length ? reservation.tasks.map((task) => {
+                    const fallbackPetLabel = taskPetLabel({
+                      pet: task.pet,
+                      reservation: { reservationPets: reservation.reservationPets },
+                    });
+
+                    return (
+                      <tr key={task.id}>
+                        <td>
+                          <strong>{task.title}</strong>
+                          {task.description ? <div className="muted">{task.description}</div> : null}
+                        </td>
+                        <td>
+                          {task.pet
+                            ? <Link href={`/pets/${task.pet.id}/ficha`}>{task.pet.name}</Link>
+                            : fallbackPetLabel ?? "-"}
+                        </td>
+                        <td className="mono subtle">{formatDateOnly(task.taskDate)}</td>
+                        <td className="muted">
+                          {task.endsAt ? `Até ${formatDateOnly(task.endsAt)}` : `${task.occurrences.length} ocorrência`}
+                        </td>
+                      </tr>
+                    );
+                  }) : (
                     <tr><td colSpan={4} className="muted">Nenhuma tarefa vinculada a esta reserva.</td></tr>
                   )}
                 </tbody>

@@ -82,6 +82,7 @@ export default async function TutorDetailPage({
   const creditBalanceCents = sumCreditBalance(tutor.creditTransactions);
   const recentReservations = tutor.reservations.slice(0, 6);
   const links = phoneLinks(tutor.phone);
+  const secondaryLinks = phoneLinks(tutor.secondaryPhone);
 
   return (
     <>
@@ -102,6 +103,8 @@ export default async function TutorDetailPage({
                 name: tutor.name,
                 email: tutor.email,
                 phone: tutor.phone,
+                secondaryPhone: tutor.secondaryPhone,
+                secondaryPhoneNote: tutor.secondaryPhoneNote,
                 document: tutor.document,
                 cep: tutor.cep,
                 birthDate: tutor.birthDate,
@@ -274,6 +277,11 @@ export default async function TutorDetailPage({
                 </div>
                 <dl className="kv">
                   <dt>Telefone</dt><dd className="mono">{tutor.phone || "-"}</dd>
+                  <dt>Segundo telefone</dt>
+                  <dd>
+                    <span className="mono">{tutor.secondaryPhone || "-"}</span>
+                    {tutor.secondaryPhoneNote ? <><br /><span className="subtle">{tutor.secondaryPhoneNote}</span></> : null}
+                  </dd>
                   <dt>E-mail</dt><dd>{tutor.email || "-"}</dd>
                   <dt>CPF/RG</dt><dd className="mono">{tutor.document || "-"}</dd>
                   <dt>Nascimento</dt><dd>{longDate(tutor.birthDate)}</dd>
@@ -287,6 +295,12 @@ export default async function TutorDetailPage({
                   <a className="btn btn--sm" href={links.tel} style={{ flex: 1 }}><Phone /> Ligar</a>
                   <a className="btn btn--sm" href={links.whatsapp} target="_blank" rel="noreferrer" style={{ flex: 1 }}><Mail /> WhatsApp</a>
                 </div>
+                {tutor.secondaryPhone ? (
+                  <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                    <a className="btn btn--sm" href={secondaryLinks.tel} style={{ flex: 1 }}><Phone /> Ligar 2</a>
+                    <a className="btn btn--sm" href={secondaryLinks.whatsapp} target="_blank" rel="noreferrer" style={{ flex: 1 }}><Mail /> WhatsApp 2</a>
+                  </div>
+                ) : null}
               </div>
             </section>
 
@@ -334,6 +348,8 @@ export default async function TutorDetailPage({
                     name: tutor.name,
                     email: tutor.email,
                     phone: tutor.phone,
+                    secondaryPhone: tutor.secondaryPhone,
+                    secondaryPhoneNote: tutor.secondaryPhoneNote,
                     document: tutor.document,
                     cep: tutor.cep,
                     birthDate: tutor.birthDate,
