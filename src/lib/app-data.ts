@@ -13,8 +13,8 @@ import {
   formatDateShort,
   formatDateOnly,
   formatReservationPeriod,
-  normalizeDateOnlyBoundary,
   reservationEndDay,
+  reservationOverlapsDay,
   startOfDay,
   startOfMonth,
   toDateInputValue,
@@ -615,17 +615,6 @@ async function getTodayTasksData(today = new Date()) {
   }));
 }
 
-function reservationOverlapsDay(
-  reservation: { startsAt: Date; endsAt: Date },
-  dayStart: Date,
-  dayEnd: Date,
-) {
-  const startsAt = normalizeDateOnlyBoundary(reservation.startsAt);
-  const endsAt = normalizeDateOnlyBoundary(reservation.endsAt);
-
-  return startsAt.getTime() <= dayEnd.getTime() && endsAt.getTime() >= dayStart.getTime();
-}
-
 async function getUpcomingPetSitterVisitsData() {
   const now = new Date();
   const reservations = await getPrisma().reservation.findMany({
@@ -688,7 +677,7 @@ export async function getDashboardData() {
           where: {
             serviceType: { kind: "DAYCARE" },
             startsAt: { lte: dayEnd },
-            endsAt: { gte: dayStart },
+            endsAt: { gt: dayStart },
           },
           select: { startsAt: true, endsAt: true },
         }),
@@ -708,10 +697,14 @@ export async function getDashboardData() {
       ]);
 
     const activeReservationsToday = activeReservations.filter((reservation) =>
-      reservationOverlapsDay(reservation, dayStart, dayEnd),
+      reservationOverlapsDay({
+        startsAt: reservation.startsAt,
+        endsAt: reservation.endsAt,
+        serviceKind: reservation.serviceType.kind,
+      }, dayStart, dayEnd),
     );
     const daycareToday = daycareTodayReservations.filter((reservation) =>
-      reservationOverlapsDay(reservation, dayStart, dayEnd),
+      reservationOverlapsDay({ ...reservation, serviceKind: "DAYCARE" }, dayStart, dayEnd),
     ).length;
 
     const hostedPets = activeReservationsToday

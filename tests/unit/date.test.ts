@@ -7,6 +7,7 @@ import {
   normalizeDateOnlyBoundary,
   parseDateOnly,
   reservationEndDay,
+  reservationOverlapsDay,
   toDateInputValue,
 } from "@/lib/date";
 
@@ -46,5 +47,25 @@ describe("reservation date helpers", () => {
     expect(
       formatReservationPeriod(new Date(2026, 5, 22), new Date(2026, 5, 23), "DAYCARE"),
     ).toBe("22/06/2026");
+  });
+
+  it("does not count daycare on the synthetic exclusive end day", () => {
+    const startsAt = parseDateOnly("2026-05-28")!;
+    const endsAt = parseDateOnly("2026-05-29")!;
+    const { start, end } = businessDayBounds(parseDateOnly("2026-05-29")!);
+
+    expect(
+      reservationOverlapsDay({ startsAt, endsAt, serviceKind: "DAYCARE" }, start, end),
+    ).toBe(false);
+  });
+
+  it("keeps boarding visible on the selected check-out day", () => {
+    const startsAt = parseDateOnly("2026-05-28")!;
+    const endsAt = parseDateOnly("2026-05-29")!;
+    const { start, end } = businessDayBounds(parseDateOnly("2026-05-29")!);
+
+    expect(
+      reservationOverlapsDay({ startsAt, endsAt, serviceKind: "BOARDING" }, start, end),
+    ).toBe(true);
   });
 });

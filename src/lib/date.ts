@@ -255,6 +255,21 @@ export function reservationEndDay(endsAt: Date, kind?: string | null): Date {
   return endsAt;
 }
 
+export function reservationOverlapsDay(
+  reservation: { startsAt: Date; endsAt: Date; serviceKind?: string | null },
+  dayStart: Date,
+  dayEnd: Date,
+): boolean {
+  const startsAt = normalizeDateOnlyBoundary(reservation.startsAt);
+  const endsAt = normalizeDateOnlyBoundary(reservation.endsAt);
+  const usesExclusiveEnd = reservation.serviceKind === "DAYCARE" || reservation.serviceKind === "PET_SITTING";
+  const endsAfterDayStart = usesExclusiveEnd
+    ? endsAt.getTime() > dayStart.getTime()
+    : endsAt.getTime() >= dayStart.getTime();
+
+  return startsAt.getTime() <= dayEnd.getTime() && endsAfterDayStart;
+}
+
 export function formatReservationPeriod(startsAt: Date, endsAt: Date, kind?: string | null): string {
   const endDisplay = reservationEndDay(endsAt, kind);
   const start = formatDateOnly(startsAt);
