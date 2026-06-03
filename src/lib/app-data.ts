@@ -7,8 +7,11 @@ import { sortPriceRules } from "@/lib/pricing";
 import { refreshReservationLifecycleStatuses, sumPaidCents } from "@/lib/reservation-status";
 import { getGoogleEnvStatus } from "@/lib/google/env";
 import {
+  businessDateBoundary,
   businessDateParts,
   businessDayBounds,
+  businessDateKey,
+  addDays,
   endOfMonth,
   formatDateShort,
   formatDateOnly,
@@ -261,10 +264,7 @@ export async function getReservationsByMonthData(year: number, month: number) {
       },
     });
 
-    const toDayKey = (date: Date) => {
-      const pad = (n: number) => String(n).padStart(2, "0");
-      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-    };
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}-`;
 
     return reservations.map((reservation) => {
       const isPetSitting = reservation.serviceType.kind === "PET_SITTING";
@@ -273,35 +273,22 @@ export async function getReservationsByMonthData(year: number, month: number) {
       if (isPetSitting) {
         const visitDates = (reservation.visitDates ?? [])
           .map((entry) => entry.date)
-          .filter((date) => date >= start && date < end)
+          .filter((date) => toDateInputValue(date).startsWith(monthPrefix))
           .sort((a, b) => a.getTime() - b.getTime());
         for (const date of visitDates) {
-          days.push({ date: toDayKey(date) });
+          days.push({ date: toDateInputValue(date) });
         }
       } else {
-        const firstDay = new Date(
-          reservation.startsAt.getFullYear(),
-          reservation.startsAt.getMonth(),
-          reservation.startsAt.getDate(),
+        const firstDay = businessDateBoundary(reservation.startsAt);
+        const lastDisplayDay = businessDateBoundary(
+          reservationEndDay(reservation.endsAt, reservation.serviceType.kind),
         );
-        const lastDayExclusive = new Date(
-          reservation.endsAt.getFullYear(),
-          reservation.endsAt.getMonth(),
-          reservation.endsAt.getDate(),
-        );
-        // If endsAt has time-of-day past 00:00, include that day too
-        if (
-          reservation.endsAt.getHours() !== 0
-          || reservation.endsAt.getMinutes() !== 0
-          || reservation.endsAt.getSeconds() !== 0
-          || reservation.endsAt.getMilliseconds() !== 0
-        ) {
-          lastDayExclusive.setDate(lastDayExclusive.getDate() + 1);
-        }
+        const lastDayExclusive = addDays(lastDisplayDay, 1);
         const cursor = new Date(firstDay);
         while (cursor < lastDayExclusive) {
-          if (cursor >= start && cursor < end) {
-            days.push({ date: toDayKey(cursor) });
+          const dayKey = businessDateKey(cursor);
+          if (dayKey.startsWith(monthPrefix)) {
+            days.push({ date: dayKey });
           }
           cursor.setDate(cursor.getDate() + 1);
         }

@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { calendar_v3 } from "googleapis";
 import { google } from "googleapis";
 import { decryptText, encryptText } from "@/lib/crypto";
+import { addDays, businessDateKey, normalizeDateOnlyBoundary } from "@/lib/date";
 import { assertGoogleOAuthEnv } from "@/lib/google/env";
 
 export { getGoogleEnvStatus } from "@/lib/google/env";
@@ -25,6 +26,7 @@ export type ReservationCalendarEventInput = {
   title: string;
   startsAt: Date;
   endsAt: Date;
+  serviceKind?: string | null;
   tutorEmail?: string | null;
   inviteTutor?: boolean;
   notes?: string | null;
@@ -90,8 +92,15 @@ function clientFromStoredTokens(input: {
 }
 
 function toGoogleDate(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return businessDateKey(normalizeDateOnlyBoundary(date));
+}
+
+function toGoogleEndDate(input: ReservationCalendarEventInput) {
+  if (!input.serviceKind) return toGoogleDate(input.endsAt);
+  if (input.serviceKind === "DAYCARE" || input.serviceKind === "PET_SITTING") {
+    return toGoogleDate(input.endsAt);
+  }
+  return toGoogleDate(addDays(normalizeDateOnlyBoundary(input.endsAt), 1));
 }
 
 export function reservationToGoogleEvent(input: ReservationCalendarEventInput) {
@@ -99,7 +108,7 @@ export function reservationToGoogleEvent(input: ReservationCalendarEventInput) {
     summary: input.title,
     description: input.notes ?? undefined,
     start: { date: toGoogleDate(input.startsAt) },
-    end: { date: toGoogleDate(input.endsAt) },
+    end: { date: toGoogleEndDate(input) },
     attendees:
       input.inviteTutor && input.tutorEmail ? [{ email: input.tutorEmail }] : undefined,
     extendedProperties: {

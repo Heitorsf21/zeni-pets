@@ -31,6 +31,20 @@ describe("Google Calendar event mapping", () => {
     expect((event.start as { dateTime?: string }).dateTime).toBeUndefined();
   });
 
+  it("keeps the selected boarding check-out day visible in Google Calendar", () => {
+    const event = reservationToGoogleEvent({
+      reservationId: "reservation-4",
+      title: "George, Jude, Sol - Hospedagem",
+      startsAt: new Date("2026-06-03T10:00:00-03:00"),
+      endsAt: new Date("2026-06-07T18:00:00-03:00"),
+      serviceKind: "BOARDING",
+      inviteTutor: false,
+    });
+
+    expect(event.start).toEqual({ date: "2026-06-03" });
+    expect(event.end).toEqual({ date: "2026-06-08" });
+  });
+
   it("adds attendees only when tutor invite is enabled", () => {
     const event = reservationToGoogleEvent({
       reservationId: "reservation-2",

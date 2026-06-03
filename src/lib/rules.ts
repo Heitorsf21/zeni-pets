@@ -1,3 +1,5 @@
+import { businessDateParts } from "@/lib/date";
+
 export type PickupMode = "TUTOR_DROPS_OFF" | "ZENI_PICKUP";
 
 export type SeasonWindow = {
@@ -17,10 +19,15 @@ export type ReservationTotalInput = {
 
 const DAY_MS = 86_400_000;
 
+function businessDaySerial(date: Date) {
+  const parts = businessDateParts(date);
+  return Date.UTC(parts.year, parts.month - 1, parts.day) / DAY_MS;
+}
+
 export function calculateChargeableStayUnits(startsAt: Date, endsAt: Date) {
   const diffMs = endsAt.getTime() - startsAt.getTime();
   if (!Number.isFinite(diffMs) || diffMs <= 0) return 0;
-  return Math.max(Math.ceil(diffMs / DAY_MS), 1);
+  return Math.max(businessDaySerial(endsAt) - businessDaySerial(startsAt), 1);
 }
 
 export type ReservationDailyUnitsInput = {

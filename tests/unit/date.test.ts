@@ -37,6 +37,10 @@ describe("reservation date helpers", () => {
     expect(toDateInputValue(reservationEndDay(checkout, "BOARDING"))).toBe("2026-06-24");
   });
 
+  it("keeps legacy UTC-midnight date-only values on the intended business date for inputs", () => {
+    expect(toDateInputValue(new Date("2026-06-24T00:00:00.000Z"))).toBe("2026-06-24");
+  });
+
   it("displays boarding stays using the check-out date", () => {
     expect(
       formatReservationPeriod(new Date(2026, 5, 22), new Date(2026, 5, 24), "BOARDING"),

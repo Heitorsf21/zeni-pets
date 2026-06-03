@@ -172,10 +172,11 @@ export function endOfMonth(date: Date) {
 
 export function formatDateShort(date: Date) {
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BUSINESS_TIME_ZONE,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(date);
+  }).format(normalizeDateOnlyBoundary(date));
 }
 
 export function formatDateTimeShort(date: Date) {
@@ -209,6 +210,10 @@ export function parseDateOnly(value: FormDataEntryValue | null) {
   return parseBusinessDateKey(trimmed);
 }
 
+export function businessDateBoundary(date: Date) {
+  return parseBusinessDateKey(businessDateKey(normalizeDateOnlyBoundary(date))) ?? date;
+}
+
 export function addDays(date: Date, days: number) {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + days);
@@ -216,16 +221,16 @@ export function addDays(date: Date, days: number) {
 }
 
 export function toDateInputValue(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return businessDateKey(normalizeDateOnlyBoundary(date));
 }
 
 export function formatDateOnly(date: Date) {
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BUSINESS_TIME_ZONE,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(date);
+  }).format(normalizeDateOnlyBoundary(date));
 }
 
 function isMidnight(date: Date) {

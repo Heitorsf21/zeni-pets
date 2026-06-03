@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/db";
 import { centsField, intField, optionalStringField, stringField } from "@/lib/forms";
 import { formatPetServiceTitle } from "@/lib/reservation-title";
+import { googleCalendarErrorLog, googleCalendarErrorMessage } from "@/lib/google/errors";
 import {
   createCalendarWatch,
   encryptGoogleChannelToken,
@@ -168,12 +169,18 @@ export async function updateGoogleEventTitlesAction() {
       });
       synced++;
     } catch (error) {
+      console.error("[google-calendar] failed to update event title", {
+        reservationId: reservation.id,
+        calendarId: reservation.googleCalendarId,
+        googleEventId: reservation.googleEventId,
+        error: googleCalendarErrorLog(error),
+      });
       failed++;
       await prisma.reservation.update({
         where: { id: reservation.id },
         data: {
           syncConflict: true,
-          syncConflictReason: error instanceof Error ? error.message : "Falha ao atualizar nome do evento no Google Agenda",
+          syncConflictReason: googleCalendarErrorMessage(error, "Falha ao atualizar nome do evento no Google Agenda"),
         },
       });
     }
@@ -208,6 +215,11 @@ export async function reactivateGoogleWebhookAction() {
   try {
     await replaceGoogleCalendarWatch(prisma, selectedConnection);
   } catch (error) {
+    console.error("[google-calendar] failed to reactivate webhook", {
+      connectionId: connection.id,
+      calendarId: connection.googleCalendarId,
+      error: googleCalendarErrorLog(error),
+    });
     redirect(`/configuracoes?error=${encodeURIComponent(error instanceof Error ? error.message : "Falha ao ativar webhook")}`);
   }
 
@@ -268,6 +280,7 @@ async function syncFutureReservationsToGoogle(
           }),
           startsAt: reservation.startsAt,
           endsAt: reservation.endsAt,
+          serviceKind: reservation.serviceType.kind,
           tutorEmail: reservation.tutor.email,
           inviteTutor: reservation.inviteTutor,
           notes: reservation.notes,
@@ -286,12 +299,18 @@ async function syncFutureReservationsToGoogle(
       });
       synced++;
     } catch (error) {
+      console.error("[google-calendar] failed to sync future reservation", {
+        reservationId: reservation.id,
+        calendarId: connection.googleCalendarId,
+        googleEventId: reservation.googleEventId,
+        error: googleCalendarErrorLog(error),
+      });
       failed++;
       await prisma.reservation.update({
         where: { id: reservation.id },
         data: {
           syncConflict: true,
-          syncConflictReason: error instanceof Error ? error.message : "Falha ao sincronizar com Google Agenda",
+          syncConflictReason: googleCalendarErrorMessage(error, "Falha ao sincronizar com Google Agenda"),
         },
       });
     }

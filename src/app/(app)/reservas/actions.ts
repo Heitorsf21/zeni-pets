@@ -9,12 +9,14 @@ import { getPrisma } from "@/lib/db";
 import { centsField, centsFieldStrict, optionalStringField, selectedValues, stringField } from "@/lib/forms";
 import { addDays, parseDateOnly } from "@/lib/date";
 import { formatPetServiceTitle } from "@/lib/reservation-title";
+import { googleCalendarErrorLog, googleCalendarErrorMessage } from "@/lib/google/errors";
 import {
   calculateManualDailyBaseCents,
   calculatePriceRuleStayCents,
   selectDefaultPriceRule,
 } from "@/lib/pricing";
 import { deriveInitialReservationStatus, derivePaymentStatus, sumPaidCents } from "@/lib/reservation-status";
+import { normalizeReservationPricingMode } from "@/lib/reservation-pricing-mode";
 import {
   calculateDailyUnitsForKind,
   countHighSeasonStayUnits,
@@ -377,13 +379,7 @@ export async function createReservationAction(formData: FormData) {
   const taskDrafts = reservationTaskDrafts(formData, { startsAt, petIds });
   const initialStatus = deriveInitialReservationStatus({ startsAt, endsAt });
 
-  const rawMainMode = stringField(formData, "pricingMode");
-  const persistedPricingMode =
-    rawMainMode === "manual_daily" || rawMainMode === "manual_total"
-      ? rawMainMode
-      : rawMainMode === "manual"
-        ? "manual_daily"
-        : "fixed";
+  const persistedPricingMode = normalizeReservationPricingMode(stringField(formData, "pricingMode"));
   const persistedManualDaily = centsFieldStrict(formData, "manualDailyAmountCents");
   const persistedManualTotal = centsFieldStrict(formData, "manualTotalAmountCents");
 
@@ -602,13 +598,7 @@ export async function updateReservationAction(id: string, formData: FormData) {
   const previousPetIds = existing.reservationPets.map((rp) => rp.petId);
   const previousTutorId = existing.tutorId;
 
-  const rawMainModeUpdate = stringField(formData, "pricingMode");
-  const persistedPricingModeUpdate =
-    rawMainModeUpdate === "manual_daily" || rawMainModeUpdate === "manual_total"
-      ? rawMainModeUpdate
-      : rawMainModeUpdate === "manual"
-        ? "manual_daily"
-        : "fixed";
+  const persistedPricingModeUpdate = normalizeReservationPricingMode(stringField(formData, "pricingMode"));
   const persistedManualDailyUpdate = centsFieldStrict(formData, "manualDailyAmountCents");
   const persistedManualTotalUpdate = centsFieldStrict(formData, "manualTotalAmountCents");
 
@@ -852,7 +842,13 @@ export async function deleteReservationAction(id: string) {
           calendarId: reservation.googleCalendarId,
           googleEventId: reservation.googleEventId,
         });
-      } catch {
+      } catch (error) {
+        console.error("[google-calendar] failed to delete reservation event", {
+          reservationId: id,
+          calendarId: reservation.googleCalendarId,
+          googleEventId: reservation.googleEventId,
+          error: googleCalendarErrorLog(error),
+        });
         // Ignore — the Google event will remain orphaned if cleanup fails.
       }
     }
@@ -898,6 +894,7 @@ async function syncReservationToGoogleIfConfigured(reservationId: string) {
         }),
         startsAt: reservation.startsAt,
         endsAt: reservation.endsAt,
+        serviceKind: reservation.serviceType.kind,
         tutorEmail: reservation.tutor.email,
         inviteTutor: reservation.inviteTutor,
         notes: reservation.notes,
@@ -916,11 +913,17 @@ async function syncReservationToGoogleIfConfigured(reservationId: string) {
       },
     });
   } catch (error) {
+    console.error("[google-calendar] failed to sync reservation", {
+      reservationId,
+      calendarId: connection.googleCalendarId,
+      googleEventId: reservation.googleEventId,
+      error: googleCalendarErrorLog(error),
+    });
     await prisma.reservation.update({
       where: { id: reservationId },
       data: {
         syncConflict: true,
-        syncConflictReason: error instanceof Error ? error.message : "Falha ao sincronizar Google Agenda",
+        syncConflictReason: googleCalendarErrorMessage(error, "Falha ao sincronizar Google Agenda"),
       },
     });
   }

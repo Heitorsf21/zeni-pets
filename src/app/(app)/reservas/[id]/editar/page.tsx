@@ -7,10 +7,20 @@ import { getReservationDetailData, getReservationFormData } from "@/lib/app-data
 import { reservationEndDay, toDateInputValue } from "@/lib/date";
 import { brl } from "@/lib/money";
 import {
+  calculateManualDailyBaseCents,
+  calculatePriceRuleStayCents,
+} from "@/lib/pricing";
+import {
   toReservationSeasonOptions,
   toReservationServiceOptions,
   withReservationServiceSnapshots,
 } from "@/lib/reservation-form-options";
+import { inferReservationEditPricingMode, normalizeReservationPricingMode } from "@/lib/reservation-pricing-mode";
+import {
+  calculateDailyUnitsForKind,
+  countHighSeasonStayUnits,
+  countHighSeasonUnitsFromDates,
+} from "@/lib/rules";
 import { updateReservationAction } from "../../actions";
 import { ReservationPeriodFields } from "../../reservation-period-fields";
 import { ReservationPetFields } from "../../reservation-pet-fields";
@@ -21,6 +31,97 @@ import { ServicePriceRuleFields } from "../../service-price-rule-fields";
 function centsInput(cents: number | null | undefined) {
   if (!cents) return "0,00";
   return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+type ReservationDetail = NonNullable<Awaited<ReturnType<typeof getReservationDetailData>>>;
+type ReservationPetDetail = ReservationDetail["reservationPets"][number];
+type SeasonPeriodDetail = Awaited<ReturnType<typeof getReservationFormData>>["seasonPeriods"][number];
+
+function hasStoredPetOverride(reservationPet: ReservationPetDetail) {
+  return Boolean(
+    reservationPet.serviceTypeId ||
+      reservationPet.priceRuleId ||
+      reservationPet.pricingMode ||
+      reservationPet.manualDailyCents != null ||
+      reservationPet.manualTotalCents != null,
+  );
+}
+
+function calculateStoredPetOverrideBaseCents(
+  reservationPet: ReservationPetDetail,
+  options: {
+    chargeableUnits: number;
+    highSeasonUnits: number;
+    highSeasonSurchargePercent: number;
+  },
+) {
+  const mode = normalizeReservationPricingMode(reservationPet.pricingMode);
+
+  if (mode === "manual_total") {
+    return Math.max(reservationPet.manualTotalCents ?? 0, 0);
+  }
+
+  if (mode === "manual_daily") {
+    if (reservationPet.manualDailyCents == null) return 0;
+    return calculateManualDailyBaseCents(reservationPet.manualDailyCents, options.chargeableUnits);
+  }
+
+  if (!reservationPet.priceRule) return 0;
+  return calculatePriceRuleStayCents(
+    reservationPet.priceRule,
+    1,
+    options.chargeableUnits,
+    options.highSeasonUnits,
+    { highSeasonSurchargePercent: options.highSeasonSurchargePercent },
+  );
+}
+
+function calculateFixedBaseForEdit(
+  reservation: ReservationDetail,
+  seasonPeriods: SeasonPeriodDetail[],
+  highSeasonSurchargePercent: number,
+) {
+  if (!reservation.priceRule) return null;
+
+  const visitDates = reservation.visitDates.map((visitDate) => visitDate.date);
+  const chargeableUnits = calculateDailyUnitsForKind({
+    kind: reservation.serviceType.kind,
+    startsAt: reservation.startsAt,
+    endsAt: reservation.endsAt,
+    visitDates,
+  });
+  const highSeasonUnits = visitDates.length
+    ? countHighSeasonUnitsFromDates(visitDates, seasonPeriods)
+    : countHighSeasonStayUnits(reservation.startsAt, reservation.endsAt, seasonPeriods);
+  const priceOptions = { highSeasonSurchargePercent };
+
+  const hasOverrides = reservation.reservationPets.some(hasStoredPetOverride);
+  if (!hasOverrides) {
+    return calculatePriceRuleStayCents(
+      reservation.priceRule,
+      reservation.reservationPets.length,
+      chargeableUnits,
+      highSeasonUnits,
+      priceOptions,
+    );
+  }
+
+  const soloFirstPet = calculatePriceRuleStayCents(
+    reservation.priceRule,
+    1,
+    chargeableUnits,
+    highSeasonUnits,
+    priceOptions,
+  );
+
+  return reservation.reservationPets.reduce((sum, reservationPet) => {
+    if (!hasStoredPetOverride(reservationPet)) return sum + soloFirstPet;
+    return sum + calculateStoredPetOverrideBaseCents(reservationPet, {
+      chargeableUnits,
+      highSeasonUnits,
+      highSeasonSurchargePercent,
+    });
+  }, 0);
 }
 
 export default async function EditarReservaPage({
@@ -54,6 +155,21 @@ export default async function EditarReservaPage({
   const isPetSitting = reservation.serviceType.kind === "PET_SITTING";
   const startsValue = toDateInputValue(reservation.startsAt);
   const endsValue = toDateInputValue(reservationEndDay(reservation.endsAt, reservation.serviceType.kind));
+  const highSeasonSurchargePercent = formData.settings?.highSeasonSurchargePercent ?? 0;
+  const fixedBaseForEdit = calculateFixedBaseForEdit(
+    reservation,
+    formData.seasonPeriods,
+    highSeasonSurchargePercent,
+  );
+  const editPricingMode = inferReservationEditPricingMode({
+    persistedMode: reservation.pricingMode,
+    savedBaseAmountCents: reservation.baseAmountCents,
+    recalculatedFixedBaseCents: fixedBaseForEdit,
+  });
+  const manualTotalDefaultCents =
+    editPricingMode === "manual_total"
+      ? reservation.manualTotalCents ?? reservation.baseAmountCents
+      : reservation.manualTotalCents;
 
   const defaultOverrides = Object.fromEntries(
     reservation.reservationPets
@@ -111,7 +227,7 @@ export default async function EditarReservaPage({
               <ServicePriceRuleFields
                 serviceTypes={serviceOptions}
                 defaultServiceTypeId={reservation.serviceType.id}
-                defaultPricingMode={(reservation.pricingMode === "manual_daily" || reservation.pricingMode === "manual_total" ? reservation.pricingMode : "fixed") as "fixed" | "manual_daily" | "manual_total"}
+                defaultPricingMode={editPricingMode}
                 defaultPriceRuleId={reservation.priceRule?.id}
               />
               <ReservationPetOverridesFields
@@ -145,7 +261,7 @@ export default async function EditarReservaPage({
               </label>
               <label className="field">
                 <span className="field__label">Valor total (manual)</span>
-                <input className="input" name="manualTotalAmountCents" defaultValue={centsInput(reservation.manualTotalCents)} placeholder="0,00" />
+                <input className="input" name="manualTotalAmountCents" defaultValue={centsInput(manualTotalDefaultCents)} placeholder="0,00" />
                 <span className="subtle" style={{ fontSize: 11 }}>
                   Use quando &ldquo;Valor total manual&rdquo; estiver selecionado.
                 </span>
@@ -184,6 +300,7 @@ export default async function EditarReservaPage({
               serviceTypes={serviceOptions}
               seasonPeriods={seasonOptions}
               depositPercent={formData.settings?.depositPercent ?? 50}
+              highSeasonSurchargePercent={highSeasonSurchargePercent}
               defaultServiceTypeId={reservation.serviceType.id}
               defaultPriceRuleId={reservation.priceRule?.id}
             />

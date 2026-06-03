@@ -4,14 +4,16 @@ import { useMemo, useState } from "react";
 import { brl } from "@/lib/money";
 import { selectDefaultPriceRule, sortPriceRules } from "@/lib/pricing";
 import type { ReservationServiceOption } from "@/lib/reservation-form-options";
-
-type PricingMode = "fixed" | "manual_daily" | "manual_total";
+import {
+  normalizeReservationPricingMode,
+  type ReservationPricingMode,
+} from "@/lib/reservation-pricing-mode";
 
 type Props = {
   serviceTypes: ReservationServiceOption[];
   lockServiceType?: boolean;
   defaultServiceTypeId?: string;
-  defaultPricingMode?: PricingMode | "manual";
+  defaultPricingMode?: ReservationPricingMode | "manual";
   defaultPriceRuleId?: string;
 };
 
@@ -23,11 +25,6 @@ function ruleLabel(rule: ReservationServiceOption["priceRules"][number]) {
     rule.additionalPetCents ? `+ ${brl(rule.additionalPetCents)}` : null,
   ].filter(Boolean);
   return parts.join(" - ");
-}
-
-function normalizeMode(mode: Props["defaultPricingMode"]): PricingMode {
-  if (mode === "manual") return "manual_daily";
-  return mode ?? "fixed";
 }
 
 function resolveInitialService(
@@ -56,7 +53,9 @@ export function ServicePriceRuleFields({
     (initialService ? selectDefaultPriceRule(initialService.priceRules) : null);
   const [serviceTypeId, setServiceTypeId] = useState(initialService?.id ?? "");
   const [priceRuleId, setPriceRuleId] = useState(initialRule?.id ?? "");
-  const [pricingMode, setPricingMode] = useState<PricingMode>(normalizeMode(defaultPricingMode));
+  const [pricingMode, setPricingMode] = useState<ReservationPricingMode>(
+    normalizeReservationPricingMode(defaultPricingMode),
+  );
 
   const selectedService = useMemo(
     () => serviceTypes.find((service) => service.id === serviceTypeId) ?? initialService,

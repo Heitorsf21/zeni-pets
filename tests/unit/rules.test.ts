@@ -35,6 +35,22 @@ describe("reservation calculation rules", () => {
     ).toBe(2);
   });
 
+  it("counts boarding nights by business dates, not by check-out hour", () => {
+    expect(
+      calculateChargeableStayUnits(
+        new Date("2026-06-03T10:00:00-03:00"),
+        new Date("2026-06-07T18:00:00-03:00"),
+      ),
+    ).toBe(4);
+
+    expect(
+      calculateChargeableStayUnits(
+        new Date("2026-06-03T10:00:00-03:00"),
+        new Date("2026-06-06T18:00:00-03:00"),
+      ),
+    ).toBe(3);
+  });
+
   it("treats a PET_SITTING visit as a single unit", () => {
     // Visit on 07/05: startsAt=07/05 00:00, endsAt=08/05 00:00.
     expect(
